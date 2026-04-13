@@ -70,7 +70,6 @@ class DerivativeAgent(BaseAgent):
                 fr = await self.binance.funding_rate(symbol)
                 signals["funding_rate_raw"] = fr["funding_rate"]
                 signals["funding_rate"] = funding_rate_signal(fr["funding_rate"])
-                mark = fr["mark_price"]
                 idx = fr["index_price"]
 
                 upbit_price = self.state.last_prices.get(ticker, 0)

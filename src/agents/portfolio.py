@@ -76,7 +76,7 @@ class PortfolioAgent(BaseAgent):
                 self.log(f"open_position failed: {exc}")
                 return
         elif o["side"] == "sell":
-            pnl = self.state.capital.close_position(ticker, price)
+            self.state.capital.close_position(ticker, price)
             entry = self.state.positions.get(ticker, {}).get("entry_price", price)
             if entry:
                 self.state.daily_pnl += (price - entry) / entry

@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import math
 import statistics
 from collections import deque
 
@@ -86,9 +85,9 @@ def stochastic(
         end = len(closes) - i
         start = end - k_period
         h = max(list(highs)[start:end])
-        l = min(list(lows)[start:end])
+        lo = min(list(lows)[start:end])
         c = list(closes)[end - 1]
-        ks.append(100 * (c - l) / max(h - l, 1e-12))
+        ks.append(100 * (c - lo) / max(h - lo, 1e-12))
     ks.reverse()
     return (ks[-1], statistics.fmean(ks))
 
@@ -104,8 +103,8 @@ def atr(
         return None
     trs: list[float] = []
     for i in range(-period, 0):
-        h, l, pc = highs[i], lows[i], closes[i - 1]
-        trs.append(max(h - l, abs(h - pc), abs(l - pc)))
+        h, lo, pc = highs[i], lows[i], closes[i - 1]
+        trs.append(max(h - lo, abs(h - pc), abs(lo - pc)))
     return statistics.fmean(trs)
 
 

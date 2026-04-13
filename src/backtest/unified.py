@@ -212,7 +212,7 @@ async def amain(args: argparse.Namespace) -> None:
     print("=== UNIFIED BACKTEST REPORT ===")
     for k, v in report.items():
         if k == "per_ticker":
-            print(f"  per_ticker:")
+            print("  per_ticker:")
             for ticker, stats in v.items():
                 print(f"    {ticker}: {stats}")
         elif isinstance(v, float) and abs(v) >= 1000:
