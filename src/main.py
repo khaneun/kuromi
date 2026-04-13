@@ -7,6 +7,7 @@ from pathlib import Path
 import uvicorn
 from loguru import logger
 
+from config.runtime_config import RuntimeConfig
 from config.settings import get_settings
 from src.agents.derivative import DerivativeAgent
 from src.agents.execution import ExecutionAgent
@@ -42,8 +43,13 @@ def _configure_logging(level: str) -> None:
 
 async def amain() -> None:
     settings = get_settings()
-    _configure_logging(settings.log_level)
     Path("data").mkdir(exist_ok=True)
+
+    rcfg = RuntimeConfig.load_or_create(
+        "data/runtime_config.json",
+        defaults=settings.initial_runtime_defaults(),
+    )
+    _configure_logging(rcfg.log_level)
 
     bus = EventBus()
     state = SharedState()
@@ -66,7 +72,6 @@ async def amain() -> None:
         bus,
         state,
         persistence=persistence,
-        # orchestrator는 start() 이후 주입 (아래 참조)
         dashboard_url=(
             settings.dashboard_public_url
             or f"http://localhost:{settings.dashboard_port}"
@@ -74,39 +79,41 @@ async def amain() -> None:
     )
     await telegram.start()
 
+    tickers = rcfg.trading_tickers
+
     agents = [
-        MarketDataAgent(bus, state, upbit, settings.tickers, poll_sec=1.0),
+        MarketDataAgent(bus, state, upbit, tickers, poll_sec=1.0),
         SignalAgent(bus, state, window=60),
         DerivativeAgent(
-            bus, state, binance, settings.tickers,
-            poll_sec=30.0, usdkrw=settings.usdkrw_rate,
+            bus, state, binance, tickers,
+            poll_sec=30.0, usdkrw=rcfg.usdkrw_rate,
         ),
-        OnchainAgent(bus, state, cryptoquant, settings.tickers, poll_sec=300.0),
+        OnchainAgent(bus, state, cryptoquant, tickers, poll_sec=300.0),
         StrategyAgent(bus, state),
         RiskAgent(
             bus,
             state,
-            max_positions=settings.max_concurrent_positions,
-            per_trade_risk_pct=settings.per_trade_risk_pct,
-            daily_loss_limit_pct=settings.daily_loss_limit_pct,
+            max_positions=rcfg.max_concurrent_positions,
+            per_trade_risk_pct=rcfg.per_trade_risk_pct,
+            daily_loss_limit_pct=rcfg.daily_loss_limit_pct,
         ),
         persistence,
         ExecutionAgent(
             bus, state, upbit,
-            dry_run=settings.dry_run,
+            dry_run=rcfg.dry_run,
             persistence=persistence,
         ),
         PortfolioAgent(
             bus, state, client=upbit,
             equity_tracker=equity_tracker,
-            live=(not settings.dry_run),
+            live=(not rcfg.dry_run),
         ),
         PerformanceAgent(bus, state),
         ImproverAgent(
             bus,
             state,
             api_key=settings.anthropic_api_key,
-            cadence_sec=settings.improver_cadence_sec,
+            cadence_sec=rcfg.improver_cadence_sec,
             seed_file=settings.improver_seed_file,
         ),
         NotifierAgent(bus, state, send=telegram.send),
@@ -117,14 +124,17 @@ async def amain() -> None:
     orchestrator.install_signal_handlers(asyncio.get_running_loop())
     await orchestrator.start()
 
-    # orchestrator 생성 후 bot에 주입 (start() 이후이므로 안전)
     telegram.orchestrator = orchestrator
+
+    # RuntimeConfig 초기값을 state에도 반영
+    rcfg.apply(orchestrator, state, bus)
 
     app = create_app(
         bus, state,
         persistence=persistence,
         orchestrator=orchestrator,
         equity_tracker=equity_tracker,
+        runtime_cfg=rcfg,
     )
     dashboard_cfg = uvicorn.Config(
         app, host=settings.dashboard_host, port=settings.dashboard_port, log_level="warning"

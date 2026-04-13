@@ -29,8 +29,8 @@ class SignalAgent(BaseAgent):
         self._highs: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=max(window, 200)))
         self._lows: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=max(window, 200)))
         self._volumes: dict[str, deque[float]] = defaultdict(lambda: deque(maxlen=max(window, 200)))
-        self.bus.subscribe("market.tick", self._on_price)
-        self.bus.subscribe("market.trade", self._on_trade)
+        self.subscribe("market.tick", self._on_price)
+        self.subscribe("market.trade", self._on_trade)
 
     async def run(self) -> None:
         await self._stop.wait()

@@ -30,7 +30,7 @@ class PortfolioAgent(BaseAgent):
         self.sync_sec = sync_sec
         self.live = live
         self._sync_counter = 0
-        self.bus.subscribe("order.filled", self._on_filled)
+        self.subscribe("order.filled", self._on_filled)
 
     async def setup(self) -> None:
         if self.live and self.client:

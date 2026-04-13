@@ -25,7 +25,7 @@ class RiskAgent(BaseAgent):
         self.per_trade_risk_pct = per_trade_risk_pct
         self.daily_loss_limit_pct = daily_loss_limit_pct
         self.min_order_krw = min_order_krw
-        self.bus.subscribe("trade.intent", self._on_intent)
+        self.subscribe("trade.intent", self._on_intent)
 
     async def run(self) -> None:
         await self._stop.wait()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -26,21 +27,35 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     initial_capital_krw: float = 0.0
-    trading_tickers: str = "KRW-BTC,KRW-ETH"
-    max_concurrent_positions: int = 3
-    per_trade_risk_pct: float = 0.01
-    daily_loss_limit_pct: float = 0.03
-    improver_cadence_sec: int = 3600
     improver_seed_file: str = "data/improver_seed.json"
     cryptoquant_api_key: str = ""
-    usdkrw_rate: float = 1380.0
-    dry_run: bool = True
 
     @property
     def tickers(self) -> list[str]:
-        return [t.strip() for t in self.trading_tickers.split(",") if t.strip()]
+        return [
+            t.strip()
+            for t in os.getenv("TRADING_TICKERS", "KRW-BTC,KRW-ETH").split(",")
+            if t.strip()
+        ]
 
-    def hydrate_from_secrets_manager(self) -> "Settings":
+    def initial_runtime_defaults(self) -> dict:
+        """RuntimeConfig 파일 초기 생성 시 사용할 기본값 (.env에서 읽음)."""
+        return {
+            "dry_run": os.getenv("DRY_RUN", "true").lower() in ("true", "1"),
+            "trading_tickers": [
+                t.strip()
+                for t in os.getenv("TRADING_TICKERS", "KRW-BTC,KRW-ETH").split(",")
+                if t.strip()
+            ],
+            "max_concurrent_positions": int(os.getenv("MAX_CONCURRENT_POSITIONS", "3")),
+            "per_trade_risk_pct": float(os.getenv("PER_TRADE_RISK_PCT", "0.01")),
+            "daily_loss_limit_pct": float(os.getenv("DAILY_LOSS_LIMIT_PCT", "0.03")),
+            "improver_cadence_sec": int(os.getenv("IMPROVER_CADENCE_SEC", "3600")),
+            "usdkrw_rate": float(os.getenv("USDKRW_RATE", "1380")),
+            "log_level": os.getenv("LOG_LEVEL", "INFO"),
+        }
+
+    def hydrate_from_secrets_manager(self) -> Settings:
         if self.env == "dev" or not self.secrets_name:
             return self
         import boto3

@@ -48,7 +48,7 @@ class ExecutionAgent(BaseAgent):
         self.timeout_sec = timeout_sec
         self.persistence = persistence
         self._active: dict[str, Order] = {}
-        self.bus.subscribe("trade.approved", self._on_approved)
+        self.subscribe("trade.approved", self._on_approved)
 
     async def setup(self) -> None:
         if self.dry_run or not self.persistence:

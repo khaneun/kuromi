@@ -47,6 +47,7 @@ class Orchestrator:
                 "stopping": agent.stopping,
                 "task_done": task.done() if task else True,
                 "task_exception": str(task.exception()) if task.done() and task.exception() else None,
+                "metrics": agent.metrics.to_dict(),
             })
         return statuses
 

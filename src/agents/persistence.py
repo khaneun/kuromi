@@ -31,13 +31,13 @@ class PersistenceAgent(BaseAgent):
         self._signal_counter: int = 0
         self._signal_sample_every = signal_sample_every
 
-        self.bus.subscribe("order.submitted", self._on_order_new)
-        self.bus.subscribe("order.accepted", self._on_order_update)
-        self.bus.subscribe("order.partially_filled", self._on_order_update)
-        self.bus.subscribe("order.filled", self._on_order_terminal)
-        self.bus.subscribe("order.cancelled", self._on_order_terminal)
-        self.bus.subscribe("order.failed", self._on_order_terminal)
-        self.bus.subscribe("signal.generated", self._on_signal)
+        self.subscribe("order.submitted", self._on_order_new)
+        self.subscribe("order.accepted", self._on_order_update)
+        self.subscribe("order.partially_filled", self._on_order_update)
+        self.subscribe("order.filled", self._on_order_terminal)
+        self.subscribe("order.cancelled", self._on_order_terminal)
+        self.subscribe("order.failed", self._on_order_terminal)
+        self.subscribe("signal.generated", self._on_signal)
 
     async def run(self) -> None:
         await self._stop.wait()

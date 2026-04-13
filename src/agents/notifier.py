@@ -17,7 +17,7 @@ class NotifierAgent(BaseAgent):
     def __init__(self, bus: EventBus, state: SharedState, send) -> None:
         super().__init__(bus, state)
         self._send = send  # async callable(text: str) -> None
-        self.bus.tap(self._on_any)
+        self.tap(self._on_any)
 
     async def run(self) -> None:
         await self._stop.wait()

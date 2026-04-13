@@ -44,10 +44,10 @@ class StrategyAgent(BaseAgent):
             state.strategy_params.setdefault(f"{s.name}.params", dict(s.params))
         state.strategy_params.setdefault("decision_threshold", 0.5)
 
-        self.bus.subscribe("signal.generated", self._on_signal)
-        self.bus.subscribe("signal.derivative", self._on_extra)
-        self.bus.subscribe("signal.onchain", self._on_extra)
-        self.bus.subscribe("improver.params_updated", self._on_params)
+        self.subscribe("signal.generated", self._on_signal)
+        self.subscribe("signal.derivative", self._on_extra)
+        self.subscribe("signal.onchain", self._on_extra)
+        self.subscribe("improver.params_updated", self._on_params)
 
     async def setup(self) -> None:
         self.log(f"loaded {len(self.strategies)} strategies: {[s.name for s in self.strategies]}")

@@ -22,8 +22,8 @@ class PerformanceAgent(BaseAgent):
         self.report_sec = report_sec
         self._trades: deque[dict] = deque(maxlen=window)
         self._equity_curve: deque[float] = deque(maxlen=window)
-        self.bus.subscribe("order.filled", self._on_filled)
-        self.bus.subscribe("portfolio.snapshot", self._on_snapshot)
+        self.subscribe("order.filled", self._on_filled)
+        self.subscribe("portfolio.snapshot", self._on_snapshot)
 
     async def run(self) -> None:
         while not self.stopping:

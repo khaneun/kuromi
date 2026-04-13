@@ -25,7 +25,7 @@ class MonitorAgent(BaseAgent):
         self.check_sec = check_sec
         self.stall_sec = stall_sec
         self._last_seen: dict[str, float] = defaultdict(lambda: time.time())
-        self.bus.tap(self._on_any)
+        self.tap(self._on_any)
 
     async def _on_any(self, event: Event) -> None:
         self._last_seen[event.topic] = time.time()

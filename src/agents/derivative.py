@@ -37,7 +37,7 @@ class DerivativeAgent(BaseAgent):
         self.poll_sec = poll_sec
         self.usdkrw = usdkrw
         self._orderbook: dict[str, dict] = {}
-        self.bus.subscribe("market.orderbook", self._on_orderbook)
+        self.subscribe("market.orderbook", self._on_orderbook)
 
     async def _on_orderbook(self, event: Event) -> None:
         p = event.payload
