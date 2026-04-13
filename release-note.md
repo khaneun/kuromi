@@ -2,6 +2,37 @@
 
 ---
 
+## v0.13.0 — 대시보드 UX 개선 + 종목 추천 (2026-04-14)
+
+### 개선
+
+- **시스템 탭 신설** (`src/dashboard/frontend.py`)  
+  이벤트 로그·시스템 제어·시스템 로그를 기존 대시보드/설정 탭에서 분리해 별도 '시스템' 탭으로 이동. 주요 화면 간결화.
+
+- **리스크 설정 2×2 그리드** (`src/dashboard/frontend.py`)  
+  거래당 투자 비율·일일 손실 한도·최대 동시 포지션·매매 신호 임계값 슬라이더를 세로 스택에서 2열 CSS 그리드로 재배치. 오해를 유발하던 `.slider-ticks` 레이블을 정확한 `.slider-range-hint`(최솟값·최댓값만)로 교체.
+
+- **한국 증권 색상 컨벤션** (`src/dashboard/frontend.py`)  
+  상승/매수/이익 → 빨강, 하락/매도/손실 → 파랑, 보합 → 회색으로 통일. `--blue: #388bfd` CSS 변수 추가, `.neutral` 클래스 추가.
+
+- **주문 상태 한글화** (`src/dashboard/frontend.py`)  
+  `submitted→제출됨`, `accepted→접수됨`, `partially_filled→부분체결`, `filled→체결완료`, `cancelled→취소됨`, `failed→실패` 매핑. 상태별 색상 차별화(실패=파랑, 완료=빨강).
+
+- **종목 편입·편출 추천 3종 통합**
+  - **A. 성과 기반**: `Capital._realized_per_ticker` 추가 → 티커별 실현 손익 누적. 선택 종목 칩에 **미실현 손익%** 배지 실시간 표시.
+  - **B. ImproverAgent 연동**: SYSTEM_PROMPT 갱신, LLM 응답에 `ticker_advice {add, remove}` 추가. `/api/improver/ticker-advice` 엔드포인트 신설. 선택 종목에 **▼편출** (노랑), 추천 목록에 **▲편입** (빨강) 배지.
+  - **C. 시그널 기반**: `state.last_signals` 캐시 추가. SignalAgent가 매 tick 7개 정규화 지표를 state에 저장. `/api/state`에 `last_signals` 포함. 선택 종목 chip-dot 색상이 시그널 방향 반영 (빨강/파랑/노랑).
+
+### 버그 수정
+
+- **ExecutionAgent failed 재시도** (`src/agents/execution.py`)  
+  주문 실패 시 재시도 없이 즉시 FAILED 상태로 전환되던 문제 개선. 일시적 오류(네트워크 등)에 한해 2초 대기 후 1회 재발행. 잔고 부족·최소 금액 미달 등 영구 오류는 재시도 없이 즉시 실패 처리. `Order.retry_count` 필드 추가.
+
+- **CI 배포 포트 충돌** (`.github/workflows/deploy.yml`)  
+  docker compose up 전에 수동 실행 중인 `kuromi` 컨테이너를 stop/rm하지 않아 포트 8080 `already allocated` 오류 발생. 배포 스크립트에 사전 정리 단계 추가.
+
+---
+
 ## v0.12.0 — 프로덕션 안정화 (2026-04-14)
 
 ### 버그 수정

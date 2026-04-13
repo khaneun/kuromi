@@ -228,13 +228,25 @@ ssh -i ~/kitty-key.pem ubuntu@<EC2_IP> '
 
 | 섹션 | 기능 |
 |---|---|
-| Portfolio KPI | Equity, PnL, 수익률, 포지션 수 |
-| Positions | 티커별 진입가·현재가·평가손익 |
+| Portfolio KPI | Equity, PnL, 수익률, 포지션 수 / 주문 중 KRW 별도 표시 |
+| Positions | 티커별 진입가·현재가·평가손익 (한국 컨벤션: 이익=빨강, 손실=파랑) |
 | Equity Curve | Chart.js 실시간 차트 |
 | Agents | 14개 Agent 상태 모니터링 |
-| Control Panel | Halt / Resume / 긴급청산 / Dry-run 전환 / 파라미터 조정 / Improver 프롬프트 |
-| Orders / Trades | 최근 주문·체결 이력 |
-| Event Log | WebSocket 실시간 이벤트 스트림 |
+| 설정 | 리스크 파라미터 2×2 그리드 슬라이더 / 종목 선택 (시그널·손익·Improver 추천 표시) |
+| 시스템 | 이벤트 로그 / 시스템 제어 (정지·재개·긴급청산) / 시스템 로그 |
+| Orders / Trades | 최근 주문·체결 이력 (주문 상태 한글 표기) |
+
+### 종목 추천 (설정 탭)
+
+선택된 종목 칩에 세 가지 정보가 실시간으로 표시됩니다.
+
+| 지표 | 표시 방식 | 데이터 출처 |
+|---|---|---|
+| **시그널 강도** | chip-dot 색상 (빨강=매수우위, 파랑=매도우위, 노랑=중립) | SignalAgent 7개 지표 평균 |
+| **미실현 손익** | 칩 내 손익% 배지 | Capital 포지션 mark-to-market |
+| **LLM 편출 추천** | `▼편출` 노란 배지 | ImproverAgent 성과 분석 (1시간 주기) |
+
+추천 목록에는 ImproverAgent가 편입 추천한 종목에 `▲편입` 빨간 배지가 표시됩니다.
 
 ---
 
