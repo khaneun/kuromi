@@ -388,6 +388,7 @@ input[type=range] { -webkit-appearance:none; width:100%; height:6px; background:
 input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:20px; height:20px; border-radius:50%; background:var(--accent); cursor:pointer; box-shadow:0 0 0 3px var(--surface); }
 input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%; background:var(--accent); cursor:pointer; border:3px solid var(--surface); }
 .slider-ticks { display:flex; justify-content:space-between; font-size:0.65rem; color:var(--muted); margin-top:2px; padding:0 2px; }
+.slider-range-hint { display:flex; justify-content:space-between; font-size:0.68rem; color:var(--muted); margin-top:3px; padding:0 1px; }
 .slider-note { font-size:0.72rem; color:var(--muted); margin-top:6px; font-style:italic; }
 
 /* Ticker Chips */
@@ -484,6 +485,7 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
     <a class="header-tab active" data-tab="dashboard" onclick="navigate('dashboard')">종합 대시보드</a>
     <a class="header-tab" data-tab="agents" onclick="navigate('agents')">Agent 관리</a>
     <a class="header-tab" data-tab="settings" onclick="navigate('settings')">설정</a>
+    <a class="header-tab" data-tab="system" onclick="navigate('system')">시스템</a>
   </nav>
 </header>
 
@@ -545,11 +547,6 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
       </table>
     </div>
 
-    <!-- Event Log -->
-    <div class="card dash-full">
-      <div class="card-title">이벤트 로그</div>
-      <div class="event-log" id="event-log"></div>
-    </div>
   </div>
 </div>
 
@@ -610,40 +607,42 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
     <!-- 리스크 설정 -->
     <div class="card settings-full">
       <div class="card-title">리스크 설정</div>
-      <div class="slider-group">
-        <div class="slider-header">
-          <span class="slider-label">거래당 투자 비율</span>
-          <span class="slider-val" id="risk-per-trade-val">1%</span>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px 36px">
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-label">거래당 투자 비율</span>
+            <span class="slider-val" id="risk-per-trade-val">1%</span>
+          </div>
+          <input type="range" id="cfg-risk-per-trade" min="1" max="20" step="1" value="1">
+          <div class="slider-range-hint"><span>1%</span><span>20%</span></div>
+          <div class="slider-note">한 번의 매매에 투입하는 총 자본 대비 비율</div>
         </div>
-        <input type="range" id="cfg-risk-per-trade" min="1" max="20" step="1" value="1">
-        <div class="slider-ticks"><span>1%</span><span>5%</span><span>10%</span><span>15%</span><span>20%</span></div>
-        <div class="slider-note">한 번의 매매에 투입하는 총 자본 대비 비율</div>
-      </div>
-      <div class="slider-group">
-        <div class="slider-header">
-          <span class="slider-label">일일 손실 한도</span>
-          <span class="slider-val" id="risk-daily-loss-val">3%</span>
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-label">일일 손실 한도</span>
+            <span class="slider-val" id="risk-daily-loss-val">3%</span>
+          </div>
+          <input type="range" id="cfg-risk-daily-loss" min="1" max="20" step="1" value="3">
+          <div class="slider-range-hint"><span>1%</span><span>20%</span></div>
+          <div class="slider-note">초과 시 매매 자동 중단</div>
         </div>
-        <input type="range" id="cfg-risk-daily-loss" min="1" max="20" step="1" value="3">
-        <div class="slider-ticks"><span>1%</span><span>5%</span><span>10%</span><span>15%</span><span>20%</span></div>
-        <div class="slider-note">하루 최대 허용 손실 — 초과 시 매매 자동 중단</div>
-      </div>
-      <div class="slider-group">
-        <div class="slider-header">
-          <span class="slider-label">최대 동시 포지션</span>
-          <span class="slider-val" id="max-positions-val">3개</span>
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-label">최대 동시 포지션</span>
+            <span class="slider-val" id="max-positions-val">3개</span>
+          </div>
+          <input type="range" id="cfg-max-positions" min="1" max="10" step="1" value="3">
+          <div class="slider-range-hint"><span>1개</span><span>10개</span></div>
         </div>
-        <input type="range" id="cfg-max-positions" min="1" max="10" step="1" value="3">
-        <div class="slider-ticks"><span>1</span><span>3</span><span>5</span><span>7</span><span>10</span></div>
-      </div>
-      <div class="slider-group">
-        <div class="slider-header">
-          <span class="slider-label">매매 신호 임계값</span>
-          <span class="slider-val" id="decision-threshold-val">50%</span>
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-label">매매 신호 임계값</span>
+            <span class="slider-val" id="decision-threshold-val">50%</span>
+          </div>
+          <input type="range" id="cfg-decision-threshold" min="10" max="90" step="5" value="50">
+          <div class="slider-range-hint"><span>10%</span><span>90%</span></div>
+          <div class="slider-note">높을수록 보수적 — 강한 시그널에서만 매매 실행</div>
         </div>
-        <input type="range" id="cfg-decision-threshold" min="10" max="90" step="5" value="50">
-        <div class="slider-ticks"><span>10%</span><span>30%</span><span>50%</span><span>70%</span><span>90%</span></div>
-        <div class="slider-note">높을수록 보수적 — 강한 시그널에서만 매매 실행</div>
       </div>
     </div>
 
@@ -664,31 +663,40 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
       <div class="ticker-chips" id="ticker-available" style="max-height:180px;overflow-y:auto;padding:4px 0"></div>
     </div>
 
-    <!-- 시스템 로그 -->
-    <div class="card settings-full">
-      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
-        시스템 로그 <span style="font-size:0.65rem;color:var(--muted);font-weight:400;text-transform:none">/opt/kuromi/logs/</span>
-        <button class="btn" onclick="refreshLogs()">새로고침</button>
-      </div>
-      <div class="sys-log" id="sys-log">로그를 불러오는 중...</div>
-    </div>
-
-    <!-- 시스템 제어 -->
-    <div class="card settings-full">
-      <div class="card-title">시스템 제어</div>
-      <div class="btn-row" style="margin-bottom:16px">
-        <button class="btn btn-danger" onclick="controlAction('halt','매매를 정지하시겠습니까?')">매매 정지</button>
-        <button class="btn btn-green" onclick="controlAction('resume','매매를 재개하시겠습니까?')">매매 재개</button>
-        <button class="btn btn-danger" onclick="controlAction('liquidate','전체 포지션을 긴급 청산하시겠습니까?\\n이 작업은 되돌릴 수 없습니다.')">긴급 청산</button>
-        <button class="btn btn-critical" onclick="systemStop()">시스템 종료</button>
-      </div>
-    </div>
-
     <!-- 저장 -->
     <div class="settings-full" style="display:flex;justify-content:flex-end;align-items:center;gap:16px;padding-top:8px">
       <span style="font-size:0.75rem;color:var(--muted)">LLM 모델 · 리스크 · 종목 저장 &nbsp;|&nbsp; 매매 모드는 버튼 클릭 시 즉시 반영</span>
       <button class="btn btn-primary" onclick="saveConfig()" style="padding:10px 28px;font-size:0.9rem">저장</button>
     </div>
+  </div>
+</div>
+
+<!-- ===== Tab 4: 시스템 ===== -->
+<div id="page-system" class="page">
+  <!-- 이벤트 로그 -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">이벤트 로그</div>
+    <div class="event-log" id="event-log"></div>
+  </div>
+
+  <!-- 시스템 제어 -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">시스템 제어</div>
+    <div class="btn-row" style="margin-bottom:16px">
+      <button class="btn btn-danger" onclick="controlAction('halt','매매를 정지하시겠습니까?')">매매 정지</button>
+      <button class="btn btn-green" onclick="controlAction('resume','매매를 재개하시겠습니까?')">매매 재개</button>
+      <button class="btn btn-danger" onclick="controlAction('liquidate','전체 포지션을 긴급 청산하시겠습니까?\\n이 작업은 되돌릴 수 없습니다.')">긴급 청산</button>
+      <button class="btn btn-critical" onclick="systemStop()">시스템 종료</button>
+    </div>
+  </div>
+
+  <!-- 시스템 로그 -->
+  <div class="card">
+    <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+      시스템 로그 <span style="font-size:0.65rem;color:var(--muted);font-weight:400;text-transform:none">logs/kuromi.log</span>
+      <button class="btn" onclick="refreshLogs()">새로고침</button>
+    </div>
+    <div class="sys-log" id="sys-log">로그를 불러오는 중...</div>
   </div>
 </div>
 
@@ -790,6 +798,7 @@ function startPolling(tab) {
     intervals.improver = setInterval(refreshImproverLog, 30000);
   } else if (tab === 'settings') {
     loadConfig();
+  } else if (tab === 'system') {
     refreshLogs();
     intervals.logs = setInterval(refreshLogs, 5000);
   }
