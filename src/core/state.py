@@ -9,6 +9,7 @@ from src.core.capital import Capital
 @dataclass
 class SharedState:
     last_prices: dict[str, float] = field(default_factory=dict)
+    last_signals: dict[str, dict] = field(default_factory=dict)   # C: 티커별 최신 시그널
     daily_pnl: float = 0.0
     halted: bool = False
     strategy_params: dict[str, Any] = field(default_factory=dict)

@@ -111,6 +111,7 @@ class SignalAgent(BaseAgent):
             "signal.generated",
             {"ticker": ticker, "price": price, "signals": signals},
         )
+        self.state.last_signals[ticker] = signals  # C: 대시보드 종목 추천용 캐시
 
     @staticmethod
     def _momentum(values: deque[float]) -> float:

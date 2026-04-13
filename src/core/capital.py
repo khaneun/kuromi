@@ -49,6 +49,7 @@ class Capital:
         self._initial_krw: float = initial_krw
         self._positions: dict[str, Position] = {}
         self._realized_pnl: float = 0.0
+        self._realized_per_ticker: dict[str, float] = {}  # A: 티커별 실현 손익
         self._trade_count: int = 0
 
     # ---- read ----
@@ -131,6 +132,7 @@ class Capital:
             pnl = proceeds - pos.cost
             self._krw += proceeds
             self._realized_pnl += pnl
+            self._realized_per_ticker[ticker] = self._realized_per_ticker.get(ticker, 0.0) + pnl
             self._trade_count += 1
             return pnl
 
@@ -169,6 +171,8 @@ class Capital:
 
     def snapshot(self, prices: dict[str, float]) -> dict[str, Any]:
         equity = self.total_equity(prices)
+        with self._lock:
+            realized_per_ticker = dict(self._realized_per_ticker)
         return {
             "available_krw": self.available_krw,
             "locked_krw": self.locked_krw,
@@ -176,6 +180,7 @@ class Capital:
             "total_equity": equity,
             "unrealized_pnl": self.unrealized_pnl(prices),
             "realized_pnl": self.realized_pnl,
+            "realized_per_ticker": realized_per_ticker,   # A: 티커별 실현 손익
             "total_return_pct": self.total_return_pct(prices),
             "trade_count": self.trade_count,
             "positions": {

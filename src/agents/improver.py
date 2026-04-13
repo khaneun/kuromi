@@ -20,11 +20,14 @@ class ImproverAgent(BaseAgent):
     name = "improver"
 
     SYSTEM_PROMPT = (
-        "You are a quantitative trading meta-optimizer. Given a performance "
-        "report and current strategy parameters, propose small, incremental "
-        "parameter adjustments to improve risk-adjusted returns. Respond with "
-        "a single JSON object mapping parameter names to new numeric values. "
-        "Only include parameters you want to change."
+        "You are a quantitative trading meta-optimizer. Given a performance report, "
+        "current strategy parameters, and active trading positions, propose improvements. "
+        "Respond with a single JSON object with exactly two keys:\n"
+        "1) 'params': object mapping parameter names to new numeric values (only include changes).\n"
+        "2) 'ticker_advice': object with 'add' (list of Upbit KRW-XXX codes to consider adding) "
+        "and 'remove' (list of currently active tickers to consider removing). "
+        "Base removal on poor realized PnL or weak signals. Base additions on momentum/volume leaders. "
+        "Be conservative — only recommend when evidence is clear. Empty lists are fine."
     )
 
     def __init__(
@@ -43,6 +46,7 @@ class ImproverAgent(BaseAgent):
         self.seed_file = seed_file
         self._last_report: dict | None = None
         self._feedback_log: deque[dict] = deque(maxlen=100)
+        self._ticker_advice: dict = {"add": [], "remove": []}  # B: 최신 티커 편입/편출 추천
         self._log_path = "data/improver_log.jsonl"
         self._load_log()
         self.subscribe("performance.report", self._on_report)
@@ -64,7 +68,14 @@ class ImproverAgent(BaseAgent):
             self.log(f"seed load error: {exc}")
 
     async def _on_report(self, event) -> None:
-        self._last_report = event.payload
+        report = dict(event.payload) if isinstance(event.payload, dict) else {}
+        # B: 현재 포지션(티커) 정보 포함 → LLM 편입/편출 추천 근거로 활용
+        cap = self.state.capital
+        report["active_tickers"] = list(cap.positions.keys())
+        report["realized_per_ticker"] = {
+            t: round(pnl, 2) for t, pnl in cap.snapshot(self.state.last_prices).get("realized_per_ticker", {}).items()
+        }
+        self._last_report = report
 
     async def run(self) -> None:
         while not self.stopping:
@@ -72,10 +83,22 @@ class ImproverAgent(BaseAgent):
             if not self._last_report or not self.api_key:
                 continue
             try:
-                updates = await self._ask_llm(self._last_report, self.state.strategy_params)
+                result = await self._ask_llm(self._last_report, self.state.strategy_params)
+                updates = result.get("params", {})
+                advice = result.get("ticker_advice", {})
+                if isinstance(advice, dict):
+                    self._ticker_advice = {
+                        "add": [t for t in advice.get("add", []) if isinstance(t, str)],
+                        "remove": [t for t in advice.get("remove", []) if isinstance(t, str)],
+                    }
                 if updates:
                     await self.emit("improver.params_updated", updates)
-                    self._append_log({"ts": time.time(), "updates": updates, "source": "llm"})
+                self._append_log({
+                    "ts": time.time(),
+                    "updates": updates,
+                    "ticker_advice": self._ticker_advice,
+                    "source": "llm",
+                })
             except Exception as exc:
                 self.log(f"improver error: {exc}")
 
@@ -101,13 +124,17 @@ class ImproverAgent(BaseAgent):
     def feedback_log(self) -> list[dict]:
         return list(self._feedback_log)
 
+    def ticker_advice(self) -> dict:
+        """B: 최신 LLM 티커 편입/편출 추천."""
+        return dict(self._ticker_advice)
+
     async def _ask_llm(self, report: dict, params: dict) -> dict:
         from anthropic import AsyncAnthropic
 
         client = AsyncAnthropic(api_key=self.api_key)
         msg = await client.messages.create(
             model=self.model,
-            max_tokens=512,
+            max_tokens=768,
             system=self.SYSTEM_PROMPT,
             messages=[
                 {
@@ -117,7 +144,11 @@ class ImproverAgent(BaseAgent):
             ],
         )
         text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
-        return self._safe_json(text)
+        raw = self._safe_json(text)
+        # 구버전 응답(params만 있는 flat dict) 호환 처리
+        if raw and "params" not in raw and "ticker_advice" not in raw:
+            return {"params": raw, "ticker_advice": {"add": [], "remove": []}}
+        return raw
 
     @staticmethod
     def _safe_json(text: str) -> dict:

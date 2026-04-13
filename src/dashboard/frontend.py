@@ -816,6 +816,10 @@ async function refreshDashboard() {
       api('/api/trades?limit=10'),
       api('/api/equity?last=500')
     ]);
+    // A·C: 전역 캐시 업데이트 (설정 탭 종목 추천용)
+    if (st.last_signals) lastSignals = st.last_signals;
+    if (st.capital) lastCapital = st.capital;
+    if (st.last_prices) lastPrices = st.last_prices;
     renderKPI(st);
     renderBadges(st);
     renderPositions(st.capital ? st.capital.positions || {} : {});
@@ -1067,6 +1071,9 @@ function renderImproverLog(logs) {
 var currentConfig = {};
 var currentTickers = [];
 var lastPrices = {};
+var lastSignals = {};    // C: 티커별 시그널 요약 {avg, momentum, ...}
+var lastCapital = {};    // A: 최신 capital snapshot (포지션 손익 포함)
+var tickerAdvice = {add: [], remove: []};  // B: ImproverAgent 편입/편출 추천
 var allUpbitMarkets = [];  // {code, name} fetched from Upbit
 var RECOMMENDED = ['KRW-BTC','KRW-ETH','KRW-XRP','KRW-SOL','KRW-DOGE','KRW-ADA','KRW-AVAX'];
 var LLM_NAMES = {
@@ -1164,8 +1171,19 @@ async function loadConfig() {
     $('decision-threshold-val').textContent = th + '%';
 
     currentTickers = cfg.trading_tickers || [];
+    // A·C: 최신 신호·자본 업데이트
+    if (stData.last_signals) lastSignals = stData.last_signals;
+    if (stData.capital) lastCapital = stData.capital;
     renderSelectedTickers();
     fetchUpbitMarkets();
+    // B: ImproverAgent 편입/편출 추천 비동기 로드
+    api('/api/improver/ticker-advice').then(function(adv) {
+      if (adv && (adv.add || adv.remove)) {
+        tickerAdvice = {add: adv.add || [], remove: adv.remove || []};
+        renderSelectedTickers();
+        renderAvailableTickers($('ticker-search') ? $('ticker-search').value : '');
+      }
+    }).catch(function() {});
   } catch (e) {
     console.error('Config load error:', e);
   }
@@ -1180,12 +1198,40 @@ function renderSelectedTickers() {
     el.innerHTML = '<span style="font-size:0.78rem;color:var(--muted)">선택된 종목 없음</span>';
     return;
   }
+  var SIG_KEYS = ['momentum','zscore','rsi','bollinger_pct_b','macd_hist','stochastic_k','obv_slope'];
   el.innerHTML = currentTickers.map(function(t) {
     var sym = t.replace('KRW-','');
     var price = lastPrices[t];
     var priceHtml = price ? ' <span class="ticker-chip-price">' + fmt(price) + '</span>' : '';
-    return '<span class="ticker-chip active" data-t="' + escHtml(t) + '" onclick="toggleTicker(this.dataset.t)">' +
-      '<span class="chip-dot"></span>' + escHtml(sym) + priceHtml +
+
+    // (C) 시그널 강도 → chip-dot 색상
+    var dotStyle = '';
+    var chipTitle = '';
+    var sig = lastSignals[t];
+    if (sig && sig.avg != null) {
+      var avg = sig.avg;
+      var dotColor = avg > 0.15 ? 'var(--red)' : avg < -0.15 ? 'var(--blue)' : 'var(--yellow)';
+      dotStyle = ' style="background:' + dotColor + '"';
+      chipTitle = ' title="시그널 평균: ' + (avg >= 0 ? '+' : '') + (avg * 100).toFixed(0) + '%"';
+    }
+
+    // (A) 미실현 손익 배지
+    var pnlHtml = '';
+    var posData = lastCapital.positions && lastCapital.positions[t];
+    if (posData && posData.unrealized_pnl_pct != null) {
+      var pp = posData.unrealized_pnl_pct * 100;
+      var pnlCls = pp > 0 ? 'pos' : pp < 0 ? 'neg' : 'neutral';
+      pnlHtml = ' <span class="' + pnlCls + '" style="font-size:0.7rem">' + (pp >= 0 ? '+' : '') + pp.toFixed(1) + '%</span>';
+    }
+
+    // (B) ImproverAgent 편출 추천
+    var removeHtml = '';
+    if (tickerAdvice.remove && tickerAdvice.remove.indexOf(t) !== -1) {
+      removeHtml = ' <span style="font-size:0.62rem;color:var(--yellow);margin-left:1px" title="ImproverAgent 편출 추천">▼편출</span>';
+    }
+
+    return '<span class="ticker-chip active" data-t="' + escHtml(t) + '" onclick="toggleTicker(this.dataset.t)"' + chipTitle + '>' +
+      '<span class="chip-dot"' + dotStyle + '></span>' + escHtml(sym) + priceHtml + pnlHtml + removeHtml +
       ' <span style="color:var(--muted);font-size:0.9rem;margin-left:4px">&times;</span></span>';
   }).join('');
 }
@@ -1194,30 +1240,33 @@ function renderAvailableTickers(search) {
   var el = $('ticker-available');
   if (!el) return;
   var term = search.trim().toLowerCase();
+  var adviceAdd = tickerAdvice.add || [];
   var filtered = allUpbitMarkets.filter(function(m) {
     if (currentTickers.indexOf(m.code) !== -1) return false;
-    if (!term) return RECOMMENDED.indexOf(m.code) !== -1;
+    // (B) ImproverAgent 편입 추천도 기본 목록에 포함
+    if (!term) return RECOMMENDED.indexOf(m.code) !== -1 || adviceAdd.indexOf(m.code) !== -1;
     return m.code.toLowerCase().indexOf(term) !== -1 || m.name.toLowerCase().indexOf(term) !== -1;
   });
   if (!term && filtered.length === 0 && allUpbitMarkets.length === 0) {
     el.innerHTML = '';
     return;
   }
+  function makeChip(m) {
+    var sym = m.code.replace('KRW-','');
+    // (B) 편입 추천 배지
+    var addBadge = adviceAdd.indexOf(m.code) !== -1
+      ? ' <span style="font-size:0.62rem;color:var(--red);margin-left:2px" title="ImproverAgent 편입 추천">▲편입</span>'
+      : '';
+    return '<span class="ticker-chip" data-t="' + escHtml(m.code) + '" onclick="toggleTicker(this.dataset.t)">' +
+      '<span class="chip-dot"></span>' + escHtml(sym) +
+      ' <span style="font-size:0.7rem;color:var(--muted)">' + escHtml(m.name) + '</span>' + addBadge + '</span>';
+  }
   if (!term) {
     el.innerHTML = '<span style="font-size:0.72rem;color:var(--muted);width:100%;margin-bottom:4px">추천 종목 (검색어 입력 시 전체 ' + allUpbitMarkets.length + '개 검색)</span>' +
-      filtered.map(function(m) {
-        var sym = m.code.replace('KRW-','');
-        return '<span class="ticker-chip" data-t="' + escHtml(m.code) + '" onclick="toggleTicker(this.dataset.t)">' +
-          '<span class="chip-dot"></span>' + escHtml(sym) +
-          ' <span style="font-size:0.7rem;color:var(--muted)">' + escHtml(m.name) + '</span></span>';
-      }).join('');
+      filtered.map(makeChip).join('');
   } else {
-    el.innerHTML = filtered.slice(0, 30).map(function(m) {
-      var sym = m.code.replace('KRW-','');
-      return '<span class="ticker-chip" data-t="' + escHtml(m.code) + '" onclick="toggleTicker(this.dataset.t)">' +
-        '<span class="chip-dot"></span>' + escHtml(sym) +
-        ' <span style="font-size:0.7rem;color:var(--muted)">' + escHtml(m.name) + '</span></span>';
-    }).join('') + (filtered.length > 30 ? '<span style="font-size:0.72rem;color:var(--muted)"> 외 ' + (filtered.length-30) + '개...</span>' : '');
+    el.innerHTML = filtered.slice(0, 30).map(makeChip).join('') +
+      (filtered.length > 30 ? '<span style="font-size:0.72rem;color:var(--muted)"> 외 ' + (filtered.length-30) + '개...</span>' : '');
   }
 }
 

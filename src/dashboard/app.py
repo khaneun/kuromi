@@ -112,12 +112,20 @@ def create_app(
     @app.get("/api/state")
     async def get_state() -> dict:
         snap = state.capital.snapshot(state.last_prices)
+        # C: 티커별 시그널 요약 (avg + 개별값)
+        _SIG_KEYS = ["momentum", "zscore", "rsi", "bollinger_pct_b", "macd_hist", "stochastic_k", "obv_slope"]
+        signals_summary: dict[str, dict] = {}
+        for ticker, sigs in state.last_signals.items():
+            vals = [sigs[k] for k in _SIG_KEYS if k in sigs]
+            avg = round(sum(vals) / len(vals), 3) if vals else 0.0
+            signals_summary[ticker] = {"avg": avg, **{k: round(sigs[k], 3) for k in _SIG_KEYS if k in sigs}}
         return {
             "halted": state.halted,
             "dry_run": _get_dry_run(),
             "daily_pnl": state.daily_pnl,
             "last_prices": state.last_prices,
             "capital": snap,
+            "last_signals": signals_summary,
         }
 
     @app.get("/api/agents")
@@ -180,6 +188,16 @@ def create_app(
         if agent and hasattr(agent, "feedback_log"):
             return agent.feedback_log()
         return []
+
+    @app.get("/api/improver/ticker-advice")
+    async def get_ticker_advice() -> dict:
+        """B: ImproverAgent의 최신 티커 편입/편출 추천."""
+        if not orchestrator:
+            return {"add": [], "remove": []}
+        agent = orchestrator.get_agent("improver")
+        if agent and hasattr(agent, "ticker_advice"):
+            return agent.ticker_advice()
+        return {"add": [], "remove": []}
 
     @app.get("/api/logs")
     async def get_logs(lines: int = Query(100, ge=1, le=1000)) -> dict:
