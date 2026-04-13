@@ -27,31 +27,41 @@ body {
   line-height: 1.5;
 }
 
-/* ===== Top Nav ===== */
-.topnav {
+/* ===== App Header ===== */
+.appheader {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  padding: 0 24px;
-  height: 56px;
   position: sticky;
   top: 0;
   z-index: 100;
 }
-.topnav-logo {
+.header-title {
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  height: 48px;
+  border-bottom: 1px solid var(--border);
+}
+.header-logo {
   font-size: 1.2rem;
   font-weight: 700;
   color: var(--text);
-  margin-right: 32px;
   letter-spacing: -0.02em;
 }
-.topnav-tabs {
+.header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.8rem;
+}
+.header-tabs {
   display: flex;
   gap: 0;
-  height: 100%;
+  padding: 0 24px;
+  height: 40px;
 }
-.topnav-tab {
+.header-tab {
   display: flex;
   align-items: center;
   padding: 0 16px;
@@ -65,17 +75,10 @@ body {
   user-select: none;
   height: 100%;
 }
-.topnav-tab:hover { color: var(--text); }
-.topnav-tab.active {
+.header-tab:hover { color: var(--text); }
+.header-tab.active {
   color: var(--text);
   border-bottom-color: var(--accent);
-}
-.topnav-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 0.8rem;
 }
 #ws-indicator {
   width: 8px; height: 8px; border-radius: 50%;
@@ -463,20 +466,22 @@ tr:hover td { background: rgba(88,166,255,0.04); }
 </head>
 <body>
 
-<!-- ===== Top Navigation ===== -->
-<nav class="topnav">
-  <span class="topnav-logo">Kuromi</span>
-  <div class="topnav-tabs">
-    <a class="topnav-tab active" data-tab="dashboard" onclick="navigate('dashboard')">종합 대시보드</a>
-    <a class="topnav-tab" data-tab="agents" onclick="navigate('agents')">Agent 관리</a>
-    <a class="topnav-tab" data-tab="settings" onclick="navigate('settings')">설정</a>
+<!-- ===== App Header ===== -->
+<header class="appheader">
+  <div class="header-title">
+    <span class="header-logo">Kuromi</span>
+    <div class="header-right">
+      <span id="ws-indicator"></span>
+      <span id="ws-label">연결 중...</span>
+      <span id="clock"></span>
+    </div>
   </div>
-  <div class="topnav-right">
-    <span id="ws-indicator"></span>
-    <span id="ws-label">연결 중...</span>
-    <span id="clock"></span>
-  </div>
-</nav>
+  <nav class="header-tabs">
+    <a class="header-tab active" data-tab="dashboard" onclick="navigate('dashboard')">종합 대시보드</a>
+    <a class="header-tab" data-tab="agents" onclick="navigate('agents')">Agent 관리</a>
+    <a class="header-tab" data-tab="settings" onclick="navigate('settings')">설정</a>
+  </nav>
+</header>
 
 <!-- ===== Tab 1: 종합 대시보드 ===== -->
 <div id="page-dashboard" class="page active">
@@ -727,7 +732,7 @@ var intervals = {};
 function navigate(tab) {
   currentTab = tab;
   window.location.hash = '#' + tab;
-  document.querySelectorAll('.topnav-tab').forEach(function(el) {
+  document.querySelectorAll('.header-tab').forEach(function(el) {
     el.classList.toggle('active', el.getAttribute('data-tab') === tab);
   });
   document.querySelectorAll('.page').forEach(function(el) {
@@ -949,21 +954,22 @@ function renderAgentGrid(agents) {
     var successWidth = m.success_rate != null ? Math.min(100, m.success_rate * 100) : 0;
     var errClass = (m.events_failed || 0) > 0 ? 'neg' : '';
 
+    var lastError = m.last_error || null;
     var errorSection = '';
-    if (a.last_error) {
+    if (lastError) {
       errorSection = '<div class="agent-error" onclick="this.classList.toggle(\'expanded\')">' +
         '<strong>최근 에러</strong> (클릭하여 펼치기)' +
-        '<div class="agent-error-detail">' + escHtml(a.last_error) + '</div>' +
+        '<div class="agent-error-detail">' + escHtml(lastError) + '</div>' +
         '</div>';
     }
 
     return '<div class="agent-card">' +
       '<div class="agent-header">' +
         '<span class="agent-dot ' + dotClass + '"></span>' +
-        '<span class="agent-name-ko">' + escHtml(a.display_name || a.name) + '</span>' +
+        '<span class="agent-name-ko">' + escHtml(a.label || a.name) + '</span>' +
         '<span class="agent-name-en">' + escHtml(a.name) + '</span>' +
       '</div>' +
-      '<div class="agent-role">' + escHtml(a.role || '') + '</div>' +
+      '<div class="agent-role">' + escHtml(a.description || '') + '</div>' +
       '<div class="agent-metrics">' +
         '<div class="agent-metric-row"><span class="agent-metric-label">처리 이벤트</span><span>' + (m.events_processed || 0) + '</span></div>' +
         '<div class="agent-metric-row"><span class="agent-metric-label">성공률</span><span>' + successPct + '% <span class="success-bar-bg"><span class="success-bar-fill" style="width:' + successWidth + '%"></span></span></span></div>' +
@@ -1014,14 +1020,11 @@ async function loadConfig() {
     $('cfg-dryrun').checked = !!cfg.dry_run;
     updateDryRunLabel();
 
-    if (cfg.halted) {
-      $('cfg-system-status').textContent = '정지';
-      $('cfg-system-status').className = 'badge badge-red';
-    } else if (cfg.dry_run) {
+    if (cfg.dry_run) {
       $('cfg-system-status').textContent = 'DRY-RUN';
       $('cfg-system-status').className = 'badge badge-yellow';
     } else {
-      $('cfg-system-status').textContent = '운영중';
+      $('cfg-system-status').textContent = '실매매';
       $('cfg-system-status').className = 'badge badge-green';
     }
 
@@ -1033,7 +1036,7 @@ async function loadConfig() {
     $('cfg-max-positions').value = cfg.max_concurrent_positions || 5;
     $('cfg-decision-threshold').value = cfg.decision_threshold || 0.5;
 
-    currentTickers = cfg.tickers || [];
+    currentTickers = cfg.trading_tickers || [];
     renderTickers();
   } catch (e) {
     console.error('Config load error:', e);
@@ -1077,7 +1080,7 @@ async function refreshLogs() {
   try {
     var data = await api('/api/logs?lines=200');
     var logEl = $('sys-log');
-    var text = Array.isArray(data) ? data.join('\\n') : (data.logs || data.text || JSON.stringify(data));
+    var text = data.lines ? data.lines.join('\\n') : JSON.stringify(data);
     logEl.textContent = text;
     logEl.scrollTop = logEl.scrollHeight;
   } catch (e) {
@@ -1094,7 +1097,7 @@ async function saveConfig() {
     daily_loss_limit_pct: parseFloat($('cfg-risk-daily-loss').value),
     max_concurrent_positions: parseInt($('cfg-max-positions').value),
     decision_threshold: parseFloat($('cfg-decision-threshold').value),
-    tickers: currentTickers
+    trading_tickers: currentTickers
   };
   try {
     await api('/api/config', 'PUT', payload);
