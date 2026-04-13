@@ -370,36 +370,39 @@ tr:hover td { background: rgba(88,166,255,0.04); }
 .toggle input:checked + .toggle-slider::before { transform: translateX(20px); }
 .toggle-label { font-size: 0.85rem; font-weight: 500; }
 
-/* Ticker pills */
-.ticker-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-.ticker-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 4px 10px;
-  font-size: 0.78rem;
-  font-weight: 500;
-}
-.ticker-pill-x {
-  cursor: pointer;
-  color: var(--muted);
-  font-size: 0.9rem;
-  line-height: 1;
-}
-.ticker-pill-x:hover { color: var(--red); }
-.ticker-add-row {
-  display: flex;
-  gap: 8px;
-}
-.ticker-add-row input { flex: 1; }
+/* Mode Switch */
+.mode-switch { display:flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+.mode-btn { flex:1; padding:14px; background:var(--bg); border:none; color:var(--muted); font-size:0.9rem; font-weight:600; cursor:pointer; transition:all 0.2s; text-align:center; }
+.mode-btn:first-child { border-right:1px solid var(--border); }
+.mode-btn.sel-dry { background:var(--yellow); color:#000; }
+.mode-btn.sel-live { background:rgba(248,81,73,0.15); color:var(--red); font-weight:700; }
+.mode-desc { font-size:0.8rem; color:var(--muted); margin-top:10px; padding:8px 10px; background:var(--bg); border-radius:6px; line-height:1.5; }
+
+/* Range Sliders */
+.slider-group { margin-bottom:20px; }
+.slider-header { display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px; }
+.slider-label { font-size:0.82rem; color:var(--text); }
+.slider-val { font-size:1.05rem; font-weight:700; color:var(--accent); min-width:40px; text-align:right; }
+input[type=range] { -webkit-appearance:none; width:100%; height:6px; background:var(--border); border-radius:3px; outline:none; cursor:pointer; margin:4px 0; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:20px; height:20px; border-radius:50%; background:var(--accent); cursor:pointer; box-shadow:0 0 0 3px var(--surface); }
+input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%; background:var(--accent); cursor:pointer; border:3px solid var(--surface); }
+.slider-ticks { display:flex; justify-content:space-between; font-size:0.65rem; color:var(--muted); margin-top:2px; padding:0 2px; }
+.slider-note { font-size:0.72rem; color:var(--muted); margin-top:6px; font-style:italic; }
+
+/* Ticker Chips */
+.ticker-chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+.ticker-chip { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; background:var(--bg); border:1.5px solid var(--border); border-radius:20px; cursor:pointer; transition:all 0.15s; font-size:0.82rem; user-select:none; }
+.ticker-chip:hover { border-color:var(--muted); }
+.ticker-chip.active { border-color:var(--accent); background:rgba(88,166,255,0.08); font-weight:600; }
+.chip-dot { width:6px; height:6px; border-radius:50%; background:var(--border); flex-shrink:0; }
+.ticker-chip.active .chip-dot { background:var(--green); }
+.ticker-chip-price { font-size:0.7rem; color:var(--muted); margin-left:2px; }
+.ticker-note { font-size:0.78rem; color:var(--muted); margin-bottom:8px; line-height:1.5; }
+
+/* LLM Row */
+.llm-row { display:flex; align-items:center; gap:10px; }
+.llm-badge { font-size:0.7rem; padding:2px 8px; border-radius:10px; font-weight:600; white-space:nowrap; }
+.llm-on { background:rgba(63,185,80,0.15); color:var(--green); }
 
 /* System Log */
 .sys-log {
@@ -565,86 +568,97 @@ tr:hover td { background: rgba(88,166,255,0.04); }
 <div id="page-settings" class="page">
   <div class="settings-grid">
 
-    <!-- Mode Settings -->
+    <!-- 매매 모드 -->
     <div class="card">
-      <div class="card-title">모드 설정</div>
-      <div class="form-group">
-        <div class="toggle-wrap">
-          <label class="toggle">
-            <input type="checkbox" id="cfg-dryrun">
-            <span class="toggle-slider"></span>
-          </label>
-          <span class="toggle-label" id="cfg-dryrun-label">모의매매</span>
-        </div>
+      <div class="card-title">매매 모드</div>
+      <div class="mode-switch">
+        <button class="mode-btn sel-dry" id="mode-dry" onclick="setMode(true)">모의매매</button>
+        <button class="mode-btn" id="mode-live" onclick="setMode(false)">실매매</button>
       </div>
-      <div class="form-group">
-        <div class="form-label">시스템 상태</div>
-        <span id="cfg-system-status" class="badge badge-green">운영중</span>
-      </div>
+      <div class="mode-desc" id="mode-desc">모의매매 모드입니다. 실제 주문이 실행되지 않습니다.</div>
     </div>
 
-    <!-- LLM Settings -->
+    <!-- LLM 설정 -->
     <div class="card">
       <div class="card-title">LLM 설정</div>
       <div class="form-group">
-        <label class="form-label">모델 선택</label>
-        <select class="form-select" id="cfg-llm-model">
-          <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
-          <option value="claude-opus-4-6">claude-opus-4-6</option>
-          <option value="gpt-4o">gpt-4o</option>
-          <option value="gpt-4o-mini">gpt-4o-mini</option>
-          <option value="gemini-2.5-pro">gemini-2.5-pro</option>
-          <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-        </select>
+        <label class="form-label">Improver 모델</label>
+        <div class="llm-row">
+          <select class="form-select" id="cfg-llm-model" style="flex:1">
+            <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
+            <option value="claude-opus-4-6">Claude Opus 4.6</option>
+            <option value="gpt-4o">GPT-4o</option>
+            <option value="gpt-4o-mini">GPT-4o Mini</option>
+            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+          </select>
+          <span class="llm-badge llm-on" id="llm-status">Connected</span>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Endpoint URL</label>
-        <input class="form-input" type="text" id="cfg-llm-endpoint" placeholder="비어있으면 기본 Anthropic/OpenAI/Google">
+        <input class="form-input" type="text" id="cfg-llm-endpoint" placeholder="비어있으면 기본 API 사용">
       </div>
-      <div class="form-note">API 키는 Secrets Manager에서 관리됩니다.</div>
+      <div class="form-note">API 키는 AWS Secrets Manager에서 관리됩니다.</div>
     </div>
 
-    <!-- Risk Settings -->
-    <div class="card">
+    <!-- 리스크 설정 -->
+    <div class="card settings-full">
       <div class="card-title">리스크 설정</div>
-      <div class="form-group">
-        <label class="form-label">거래당 자본 비율</label>
-        <input class="form-input" type="number" id="cfg-risk-per-trade" min="0.001" max="0.1" step="0.001">
+      <div class="slider-group">
+        <div class="slider-header">
+          <span class="slider-label">거래당 투자 비율</span>
+          <span class="slider-val" id="risk-per-trade-val">1%</span>
+        </div>
+        <input type="range" id="cfg-risk-per-trade" min="1" max="20" step="1" value="1">
+        <div class="slider-ticks"><span>1%</span><span>5%</span><span>10%</span><span>15%</span><span>20%</span></div>
+        <div class="slider-note">한 번의 매매에 투입하는 총 자본 대비 비율</div>
       </div>
-      <div class="form-group">
-        <label class="form-label">일일 손실 한도</label>
-        <input class="form-input" type="number" id="cfg-risk-daily-loss" min="0.01" max="0.2" step="0.01">
+      <div class="slider-group">
+        <div class="slider-header">
+          <span class="slider-label">일일 손실 한도</span>
+          <span class="slider-val" id="risk-daily-loss-val">3%</span>
+        </div>
+        <input type="range" id="cfg-risk-daily-loss" min="1" max="20" step="1" value="3">
+        <div class="slider-ticks"><span>1%</span><span>5%</span><span>10%</span><span>15%</span><span>20%</span></div>
+        <div class="slider-note">하루 최대 허용 손실 — 초과 시 매매 자동 중단</div>
       </div>
-      <div class="form-group">
-        <label class="form-label">최대 동시 포지션</label>
-        <input class="form-input" type="number" id="cfg-max-positions" min="1" max="20" step="1">
+      <div class="slider-group">
+        <div class="slider-header">
+          <span class="slider-label">최대 동시 포지션</span>
+          <span class="slider-val" id="max-positions-val">3개</span>
+        </div>
+        <input type="range" id="cfg-max-positions" min="1" max="10" step="1" value="3">
+        <div class="slider-ticks"><span>1</span><span>3</span><span>5</span><span>7</span><span>10</span></div>
       </div>
-      <div class="form-group">
-        <label class="form-label">의사결정 임계값</label>
-        <input class="form-input" type="number" id="cfg-decision-threshold" min="0.1" max="1.0" step="0.05">
+      <div class="slider-group">
+        <div class="slider-header">
+          <span class="slider-label">매매 신호 임계값</span>
+          <span class="slider-val" id="decision-threshold-val">50%</span>
+        </div>
+        <input type="range" id="cfg-decision-threshold" min="10" max="90" step="5" value="50">
+        <div class="slider-ticks"><span>10%</span><span>30%</span><span>50%</span><span>70%</span><span>90%</span></div>
+        <div class="slider-note">높을수록 보수적 — 강한 시그널에서만 매매 실행</div>
       </div>
     </div>
 
-    <!-- Trading Tickers -->
-    <div class="card">
+    <!-- 매매 종목 -->
+    <div class="card settings-full">
       <div class="card-title">매매 종목</div>
-      <div class="ticker-pills" id="ticker-pills"></div>
-      <div class="ticker-add-row">
-        <input class="form-input" type="text" id="ticker-input" placeholder="KRW-BTC">
-        <button class="btn btn-primary" onclick="addTicker()">추가</button>
-      </div>
+      <div class="ticker-note">모니터링할 종목을 선택하세요. StrategyAgent가 선택된 종목의 시그널을 분석합니다.</div>
+      <div class="ticker-chips" id="ticker-chips"></div>
     </div>
 
-    <!-- System Log -->
+    <!-- 시스템 로그 -->
     <div class="card settings-full">
       <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
-        시스템 로그
+        시스템 로그 <span style="font-size:0.65rem;color:var(--muted);font-weight:400;text-transform:none">/opt/kuromi/logs/</span>
         <button class="btn" onclick="refreshLogs()">새로고침</button>
       </div>
       <div class="sys-log" id="sys-log">로그를 불러오는 중...</div>
     </div>
 
-    <!-- System Control -->
+    <!-- 시스템 제어 -->
     <div class="card settings-full">
       <div class="card-title">시스템 제어</div>
       <div class="btn-row" style="margin-bottom:16px">
@@ -655,7 +669,7 @@ tr:hover td { background: rgba(88,166,255,0.04); }
       </div>
     </div>
 
-    <!-- Save Button -->
+    <!-- 저장 -->
     <div class="settings-full" style="text-align:right;padding-top:8px">
       <button class="btn btn-primary" onclick="saveConfig()" style="padding:10px 32px;font-size:0.9rem">설정 저장</button>
     </div>
@@ -1012,68 +1026,102 @@ function renderImproverLog(logs) {
 /* ========== Tab 3: Settings ========== */
 var currentConfig = {};
 var currentTickers = [];
+var lastPrices = {};
+var UPBIT_POPULAR = [
+  'KRW-BTC','KRW-ETH','KRW-XRP','KRW-SOL','KRW-DOGE',
+  'KRW-ADA','KRW-AVAX','KRW-LINK','KRW-DOT','KRW-MATIC',
+  'KRW-ATOM','KRW-NEAR','KRW-APT','KRW-SUI','KRW-ARB',
+  'KRW-OP','KRW-AAVE','KRW-EOS','KRW-SAND','KRW-MANA'
+];
+
+function setMode(dryRun) {
+  if (!dryRun) {
+    if (!confirm('실매매 모드로 전환하시겠습니까?\\n실제 자금으로 거래가 실행됩니다.')) return;
+  }
+  api('/api/config', 'PUT', {dry_run: dryRun}).then(function() {
+    updateModeUI(dryRun);
+    showToast(dryRun ? '모의매매 모드로 전환' : '실매매 모드로 전환', 'success');
+  }).catch(function() { showToast('모드 전환 실패', 'error'); });
+}
+
+function updateModeUI(dryRun) {
+  $('mode-dry').className = 'mode-btn' + (dryRun ? ' sel-dry' : '');
+  $('mode-live').className = 'mode-btn' + (!dryRun ? ' sel-live' : '');
+  $('mode-desc').textContent = dryRun
+    ? '모의매매 모드입니다. 실제 주문이 실행되지 않습니다.'
+    : '실매매 모드입니다. 실제 자금으로 거래가 실행됩니다.';
+}
+
+function setupSliders() {
+  [
+    {id:'cfg-risk-per-trade', valId:'risk-per-trade-val', suffix:'%'},
+    {id:'cfg-risk-daily-loss', valId:'risk-daily-loss-val', suffix:'%'},
+    {id:'cfg-max-positions', valId:'max-positions-val', suffix:'개'},
+    {id:'cfg-decision-threshold', valId:'decision-threshold-val', suffix:'%'}
+  ].forEach(function(s) {
+    var el = $(s.id);
+    if (el) el.addEventListener('input', function() {
+      $(s.valId).textContent = el.value + s.suffix;
+    });
+  });
+}
 
 async function loadConfig() {
   try {
-    var cfg = await api('/api/config');
+    var results = await Promise.all([api('/api/config'), api('/api/state')]);
+    var cfg = results[0];
+    var stData = results[1];
     currentConfig = cfg;
-    $('cfg-dryrun').checked = !!cfg.dry_run;
-    updateDryRunLabel();
+    lastPrices = stData.last_prices || {};
 
-    if (cfg.dry_run) {
-      $('cfg-system-status').textContent = 'DRY-RUN';
-      $('cfg-system-status').className = 'badge badge-yellow';
-    } else {
-      $('cfg-system-status').textContent = '실매매';
-      $('cfg-system-status').className = 'badge badge-green';
-    }
+    updateModeUI(!!cfg.dry_run);
 
     if (cfg.llm_model) $('cfg-llm-model').value = cfg.llm_model;
     $('cfg-llm-endpoint').value = cfg.llm_endpoint || '';
 
-    $('cfg-risk-per-trade').value = cfg.per_trade_risk_pct || 0.02;
-    $('cfg-risk-daily-loss').value = cfg.daily_loss_limit_pct || 0.05;
-    $('cfg-max-positions').value = cfg.max_concurrent_positions || 5;
-    $('cfg-decision-threshold').value = cfg.decision_threshold || 0.5;
+    var pct1 = Math.round((cfg.per_trade_risk_pct || 0.01) * 100);
+    $('cfg-risk-per-trade').value = pct1;
+    $('risk-per-trade-val').textContent = pct1 + '%';
+
+    var pct2 = Math.round((cfg.daily_loss_limit_pct || 0.03) * 100);
+    $('cfg-risk-daily-loss').value = pct2;
+    $('risk-daily-loss-val').textContent = pct2 + '%';
+
+    var mp = cfg.max_concurrent_positions || 3;
+    $('cfg-max-positions').value = mp;
+    $('max-positions-val').textContent = mp + '개';
+
+    var th = Math.round((cfg.decision_threshold || 0.5) * 100);
+    $('cfg-decision-threshold').value = th;
+    $('decision-threshold-val').textContent = th + '%';
 
     currentTickers = cfg.trading_tickers || [];
-    renderTickers();
+    renderTickerChips();
   } catch (e) {
     console.error('Config load error:', e);
   }
 }
 
-function updateDryRunLabel() {
-  $('cfg-dryrun-label').textContent = $('cfg-dryrun').checked ? '모의매매' : '실매매';
-}
-
-function renderTickers() {
-  $('ticker-pills').innerHTML = currentTickers.map(function(t, i) {
-    return '<span class="ticker-pill">' + escHtml(t) +
-      '<span class="ticker-pill-x" onclick="removeTicker(' + i + ')">&times;</span></span>';
+function renderTickerChips() {
+  var all = UPBIT_POPULAR.slice();
+  currentTickers.forEach(function(t) {
+    if (all.indexOf(t) === -1) all.push(t);
+  });
+  $('ticker-chips').innerHTML = all.map(function(t) {
+    var isActive = currentTickers.indexOf(t) !== -1;
+    var sym = t.replace('KRW-','');
+    var price = lastPrices[t];
+    var priceHtml = price ? ' <span class="ticker-chip-price">' + fmt(price) + '</span>' : '';
+    return '<span class="ticker-chip' + (isActive ? ' active' : '') + '" onclick="toggleTicker(\\'' + t + '\\')">' +
+      '<span class="chip-dot"></span>' + sym + priceHtml + '</span>';
   }).join('');
 }
 
-function addTicker() {
-  var input = $('ticker-input');
-  var val = input.value.trim().toUpperCase();
-  if (!val) return;
-  if (!/^KRW-[A-Z0-9]+$/.test(val)) {
-    showToast('형식이 올바르지 않습니다. (예: KRW-BTC)', 'error');
-    return;
-  }
-  if (currentTickers.indexOf(val) !== -1) {
-    showToast('이미 추가된 종목입니다.', 'error');
-    return;
-  }
-  currentTickers.push(val);
-  renderTickers();
-  input.value = '';
-}
-
-function removeTicker(idx) {
-  currentTickers.splice(idx, 1);
-  renderTickers();
+function toggleTicker(ticker) {
+  var idx = currentTickers.indexOf(ticker);
+  if (idx === -1) { currentTickers.push(ticker); }
+  else { currentTickers.splice(idx, 1); }
+  renderTickerChips();
 }
 
 async function refreshLogs() {
@@ -1090,13 +1138,12 @@ async function refreshLogs() {
 
 async function saveConfig() {
   var payload = {
-    dry_run: $('cfg-dryrun').checked,
     llm_model: $('cfg-llm-model').value,
-    llm_endpoint: $('cfg-llm-endpoint').value || null,
-    per_trade_risk_pct: parseFloat($('cfg-risk-per-trade').value),
-    daily_loss_limit_pct: parseFloat($('cfg-risk-daily-loss').value),
+    llm_endpoint: $('cfg-llm-endpoint').value || '',
+    per_trade_risk_pct: parseInt($('cfg-risk-per-trade').value) / 100,
+    daily_loss_limit_pct: parseInt($('cfg-risk-daily-loss').value) / 100,
     max_concurrent_positions: parseInt($('cfg-max-positions').value),
-    decision_threshold: parseFloat($('cfg-decision-threshold').value),
+    decision_threshold: parseInt($('cfg-decision-threshold').value) / 100,
     trading_tickers: currentTickers
   };
   try {
@@ -1178,11 +1225,7 @@ function initApp() {
   try { initChart(); } catch(e) { console.warn('Chart.js init failed:', e); }
   connectWS();
 
-  $('cfg-dryrun').addEventListener('change', updateDryRunLabel);
-
-  $('ticker-input').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') addTicker();
-  });
+  setupSliders();
 
   /* Clock */
   setInterval(function() {
