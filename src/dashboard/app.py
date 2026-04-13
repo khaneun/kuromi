@@ -65,6 +65,23 @@ def create_app(
     }
     _CRITICAL_REJECT = {"system_halted", "daily_loss_limit"}
 
+    _uvicorn_loop: asyncio.AbstractEventLoop | None = None
+
+    @app.on_event("startup")
+    async def _capture_loop() -> None:
+        nonlocal _uvicorn_loop
+        _uvicorn_loop = asyncio.get_running_loop()
+
+    async def _do_broadcast(msg: str) -> None:
+        dead: list[WebSocket] = []
+        for ws in list(clients):
+            try:
+                await ws.send_text(msg)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            clients.discard(ws)
+
     async def broadcast(event: Event) -> None:
         if not clients:
             return
@@ -77,14 +94,11 @@ def create_app(
         msg = json.dumps(
             {"topic": event.topic, "source": event.source, "payload": _jsonable(event.payload)}
         )
-        dead: list[WebSocket] = []
-        for ws in clients:
-            try:
-                await ws.send_text(msg)
-            except Exception:
-                dead.append(ws)
-        for ws in dead:
-            clients.discard(ws)
+        # uvicorn이 별도 스레드에서 실행될 경우, 해당 루프에 WebSocket 전송을 위임
+        if _uvicorn_loop is not None and _uvicorn_loop.is_running():
+            asyncio.run_coroutine_threadsafe(_do_broadcast(msg), _uvicorn_loop)
+        else:
+            await _do_broadcast(msg)
 
     bus.tap(broadcast)
 

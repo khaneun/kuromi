@@ -2,6 +2,37 @@
 
 ---
 
+## v0.12.0 — 프로덕션 안정화 (2026-04-14)
+
+### 버그 수정
+
+- **`Capital.sync_from_upbit()` 데드락 수정** (`src/core/capital.py`)  
+  `threading.Lock`을 보유한 채로 동일 락을 획득하는 `self.total_equity()`를 내부에서 호출해 재진입 데드락 발생. 기동 60초 후 첫 Upbit 동기화 시 메인 스레드와 uvicorn 스레드 모두 무한 대기 → 전체 시스템 동결. 락 재진입 없이 인라인으로 동등 계산하도록 수정.
+
+- **`PortfolioAgent.setup()` 기동 블로킹 수정** (`src/agents/portfolio.py`)  
+  `live=True` 모드에서 `setup()`이 Upbit API를 동기 호출해 httpx 연결이 CLOSE_WAIT 상태가 되면 `asyncio.wait_for`로도 취소 불가 → Orchestrator.start() 전체 블로킹. `setup()`을 no-op으로 변경하고 초기 동기화를 `run()` 루프로 이전.
+
+- **uvicorn 스레드 분리** (`src/main.py`)  
+  uvicorn을 메인 asyncio 루프의 `create_task`로 실행 시 에이전트 이벤트 루프 포화로 HTTP 응답 불가. `threading.Thread` + `asyncio.run(dashboard.serve())`로 독립 이벤트 루프에서 실행.
+
+- **uvicorn 비-메인 스레드 signal handler 제거** (`src/main.py`)  
+  uvicorn 0.44.0은 `Config.__init__`에 `install_signal_handlers` 파라미터 미지원. `Server` 인스턴스 메서드를 `lambda: None`으로 패치해 비-메인 스레드에서의 signal handler 설치 시도 방지.
+
+- **uvicorn cross-loop WebSocket 브로드캐스트** (`src/dashboard/app.py`)  
+  uvicorn이 별도 스레드에서 실행될 때 메인 루프에서 직접 `await ws.send_text()` 호출 시 루프 불일치 오류. 시작 시 uvicorn 루프를 캡처(`_uvicorn_loop`)해 `asyncio.run_coroutine_threadsafe()`로 위임.
+
+### 인프라
+
+- **EC2 IMDSv2 hop limit 조정**: Docker 브리지가 네트워크 홉 1개를 추가해 컨테이너 내부에서 IMDSv2 메타데이터 접근 불가. `HttpPutResponseHopLimit=2`로 수정.
+- **Secrets Manager 연동 정상화**: 컨테이너 실행 시 `-e ENV=prod -e SECRETS_NAME=kuromi/prod` 환경변수 필수. Dockerfile에 기본 `ENV=prod` 포함.
+- **`dry_run` 런타임 전환**: `/api/config PUT` 엔드포인트로 재기동 없이 실매매 모드 전환 가능.
+
+### 개선
+
+- 대시보드 헤더에 Kuromi 캐릭터 이미지 추가 (base64 인라인 임베딩, 28px 원형)
+
+---
+
 ## v0.11.0 — Docker + CI/CD (2026-04-13)
 
 ### 추가

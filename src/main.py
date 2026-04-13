@@ -136,17 +136,40 @@ async def amain() -> None:
         equity_tracker=equity_tracker,
         runtime_cfg=rcfg,
     )
+
+    # uvicorn을 별도 스레드에서 실행 — 에이전트 이벤트 루프와 분리
+    import threading
     dashboard_cfg = uvicorn.Config(
-        app, host=settings.dashboard_host, port=settings.dashboard_port, log_level="warning"
+        app,
+        host=settings.dashboard_host,
+        port=settings.dashboard_port,
+        log_level="info",
     )
     dashboard = uvicorn.Server(dashboard_cfg)
-    dashboard_task = asyncio.create_task(dashboard.serve(), name="dashboard")
+    # 비-메인 스레드에서는 signal handler 설치가 불가능하므로 무력화
+    dashboard.install_signal_handlers = lambda: None  # type: ignore[method-assign]
+
+    def _run_dashboard() -> None:
+        import sys
+        import traceback as _tb
+        print("DASHBOARD: starting", flush=True, file=sys.stderr)
+        try:
+            asyncio.run(dashboard.serve())
+            print("DASHBOARD: serve() returned normally", flush=True, file=sys.stderr)
+        except BaseException as exc:
+            print(f"DASHBOARD: CRASH [{type(exc).__name__}]: {exc}", flush=True, file=sys.stderr)
+            print(_tb.format_exc(), flush=True, file=sys.stderr)
+        finally:
+            print("DASHBOARD: EXITED", flush=True, file=sys.stderr)
+
+    dashboard_thread = threading.Thread(target=_run_dashboard, name="dashboard", daemon=True)
+    dashboard_thread.start()
 
     try:
         await orchestrator.wait()
     finally:
         dashboard.should_exit = True
-        await dashboard_task
+        dashboard_thread.join(timeout=5.0)
         await telegram.stop()
         await binance.aclose()
         await cryptoquant.aclose()

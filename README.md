@@ -195,6 +195,31 @@ git push origin main
 # → GitHub Actions: lint → build → ECR push → SSH deploy → healthcheck
 ```
 
+### 수동 배포 (긴급 핫픽스)
+
+```bash
+# 로컬에서 빌드 & ECR 푸시
+ECR=<AWS_ACCOUNT_ID>.dkr.ecr.ap-northeast-2.amazonaws.com/kuromi
+aws ecr get-login-password --region ap-northeast-2 | docker login --username AWS --password-stdin $ECR
+docker build -t kuromi . && docker tag kuromi:latest $ECR:latest && docker push $ECR:latest
+
+# EC2에서 컨테이너 교체
+ssh -i ~/kitty-key.pem ubuntu@<EC2_IP> '
+  docker pull <ECR>:latest
+  docker stop kuromi && docker rm kuromi
+  docker run -d --name kuromi --restart always -p 8080:8080 \
+    -e AWS_DEFAULT_REGION=ap-northeast-2 \
+    -e ENV=prod -e SECRETS_NAME=kuromi/prod \
+    -v kuromi_data:/app/data -v kuromi_logs:/app/logs \
+    <ECR>:latest
+'
+```
+
+> **주의 사항**
+> - `ENV=prod`와 `SECRETS_NAME=kuromi/prod`는 반드시 전달해야 Secrets Manager에서 API 키를 로드합니다.
+> - EC2 인스턴스의 IMDSv2 hop limit이 `2` 이상이어야 컨테이너 내부에서 Secrets Manager 접근이 가능합니다.  
+>   (`aws ec2 modify-instance-metadata-options --http-put-response-hop-limit 2 ...`)
+
 ---
 
 ## 대시보드

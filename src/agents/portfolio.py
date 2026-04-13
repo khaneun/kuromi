@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from src.agents.base import BaseAgent
 from src.core.equity_tracker import EquityTracker
 from src.core.event_bus import Event, EventBus
@@ -33,13 +35,7 @@ class PortfolioAgent(BaseAgent):
         self.subscribe("order.filled", self._on_filled)
 
     async def setup(self) -> None:
-        if self.live and self.client:
-            await self._sync_upbit()
-            self.log(
-                f"synced from upbit: "
-                f"KRW={self.state.capital.available_krw:,.0f}  "
-                f"positions={list(self.state.capital.positions.keys())}"
-            )
+        pass  # initial sync happens in run() to avoid blocking startup
 
     async def run(self) -> None:
         while not self.stopping:

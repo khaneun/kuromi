@@ -144,7 +144,11 @@ class Capital:
                         ticker=ticker, entry_price=avg_buy, volume=balance
                     )
             if self._initial_krw == 0:
-                self._initial_krw = self.total_equity(prices)
+                # 이미 락을 보유 중이므로 total_equity() 재호출 금지 (데드락) — 인라인 계산
+                equity = self._krw
+                for ticker, pos in self._positions.items():
+                    equity += prices.get(ticker, pos.entry_price) * pos.volume
+                self._initial_krw = equity
 
     def snapshot(self, prices: dict[str, float]) -> dict[str, Any]:
         equity = self.total_equity(prices)
