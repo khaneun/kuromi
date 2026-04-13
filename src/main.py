@@ -96,6 +96,8 @@ async def amain() -> None:
             max_positions=rcfg.max_concurrent_positions,
             per_trade_risk_pct=rcfg.per_trade_risk_pct,
             daily_loss_limit_pct=rcfg.daily_loss_limit_pct,
+            min_profit_pct=rcfg.min_profit_pct,
+            stop_loss_pct=rcfg.stop_loss_pct,
         ),
         persistence,
         ExecutionAgent(

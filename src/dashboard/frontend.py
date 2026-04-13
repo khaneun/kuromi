@@ -646,6 +646,24 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
           <div class="slider-range-hint"><span>10%</span><span>90%</span></div>
           <div class="slider-note">높을수록 보수적 — 강한 시그널에서만 매매 실행</div>
         </div>
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-label">최소 수익 목표</span>
+            <span class="slider-val" id="min-profit-val">0.5%</span>
+          </div>
+          <input type="range" id="cfg-min-profit" min="1" max="50" step="1" value="5">
+          <div class="slider-range-hint"><span>0.1%</span><span>5.0%</span></div>
+          <div class="slider-note">이 수익률 미달 시 매도 보류 (수수료 0.1% 감안)</div>
+        </div>
+        <div class="slider-group">
+          <div class="slider-header">
+            <span class="slider-label">손절 한도</span>
+            <span class="slider-val" id="stop-loss-val">2.0%</span>
+          </div>
+          <input type="range" id="cfg-stop-loss" min="1" max="100" step="1" value="20">
+          <div class="slider-range-hint"><span>0.1%</span><span>10%</span></div>
+          <div class="slider-note">이 손실률 초과 시 수익 목표 무시하고 즉시 매도</div>
+        </div>
       </div>
     </div>
 
@@ -1117,12 +1135,14 @@ function setupSliders() {
     {id:'cfg-risk-per-trade', valId:'risk-per-trade-val', suffix:'%'},
     {id:'cfg-risk-daily-loss', valId:'risk-daily-loss-val', suffix:'%'},
     {id:'cfg-max-positions', valId:'max-positions-val', suffix:'개'},
-    {id:'cfg-decision-threshold', valId:'decision-threshold-val', suffix:'%'}
+    {id:'cfg-decision-threshold', valId:'decision-threshold-val', suffix:'%'},
+    {id:'cfg-min-profit', valId:'min-profit-val', suffix:'', fmt: function(v){ return (v/10).toFixed(1)+'%'; }},
+    {id:'cfg-stop-loss', valId:'stop-loss-val', suffix:'', fmt: function(v){ return (v/10).toFixed(1)+'%'; }}
   ].forEach(function(s) {
     var el = $(s.id);
-    if (el) el.addEventListener('input', function() {
-      $(s.valId).textContent = el.value + s.suffix;
-    });
+    if (el) el.addEventListener('input', (function(s, el) { return function() {
+      $(s.valId).textContent = s.fmt ? s.fmt(el.value) : (el.value + s.suffix);
+    }; })(s, el));
   });
 }
 
@@ -1173,6 +1193,14 @@ async function loadConfig() {
     var th = Math.round((cfg.decision_threshold || 0.5) * 100);
     $('cfg-decision-threshold').value = th;
     $('decision-threshold-val').textContent = th + '%';
+
+    var mp = Math.round((cfg.min_profit_pct || 0.005) * 1000);
+    $('cfg-min-profit').value = mp;
+    $('min-profit-val').textContent = (mp / 10).toFixed(1) + '%';
+
+    var sl = Math.round((cfg.stop_loss_pct || 0.02) * 1000);
+    $('cfg-stop-loss').value = sl;
+    $('stop-loss-val').textContent = (sl / 10).toFixed(1) + '%';
 
     currentTickers = cfg.trading_tickers || [];
     // A·C: 최신 신호·자본 업데이트
@@ -1331,6 +1359,8 @@ async function saveConfig() {
     daily_loss_limit_pct: parseInt($('cfg-risk-daily-loss').value) / 100,
     max_concurrent_positions: parseInt($('cfg-max-positions').value),
     decision_threshold: parseInt($('cfg-decision-threshold').value) / 100,
+    min_profit_pct: parseInt($('cfg-min-profit').value) / 1000,
+    stop_loss_pct: parseInt($('cfg-stop-loss').value) / 1000,
     trading_tickers: currentTickers
   };
   try {

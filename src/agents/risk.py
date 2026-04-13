@@ -19,12 +19,16 @@ class RiskAgent(BaseAgent):
         per_trade_risk_pct: float,
         daily_loss_limit_pct: float,
         min_order_krw: float = 5000.0,
+        min_profit_pct: float = 0.005,
+        stop_loss_pct: float = 0.02,
     ) -> None:
         super().__init__(bus, state)
         self.max_positions = max_positions
         self.per_trade_risk_pct = per_trade_risk_pct
         self.daily_loss_limit_pct = daily_loss_limit_pct
         self.min_order_krw = min_order_krw
+        self.min_profit_pct = min_profit_pct
+        self.stop_loss_pct = stop_loss_pct
         self.subscribe("trade.intent", self._on_intent)
 
     async def run(self) -> None:
@@ -55,6 +59,14 @@ class RiskAgent(BaseAgent):
             and len(self.state.capital.positions) >= self.max_positions
         ):
             return "max_positions"
+        if intent["side"] == "sell":
+            pos = self.state.capital.positions.get(intent["ticker"])
+            if pos and pos.entry_price > 0:
+                pnl_pct = (float(intent["price"]) - pos.entry_price) / pos.entry_price
+                if pnl_pct <= -self.stop_loss_pct:
+                    return None  # 손절: 즉시 허용
+                if pnl_pct < self.min_profit_pct:
+                    return "min_profit_not_reached"  # 수익 목표 미달: 보류
         return None
 
     def _size(self, intent: dict) -> dict | None:
