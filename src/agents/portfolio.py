@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-
 from src.agents.base import BaseAgent
 from src.core.equity_tracker import EquityTracker
 from src.core.event_bus import Event, EventBus
