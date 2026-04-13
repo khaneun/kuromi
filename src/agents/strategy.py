@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections import defaultdict
 from typing import Iterable
 
@@ -8,6 +9,9 @@ from src.core.event_bus import Event, EventBus
 from src.core.state import SharedState
 from src.strategies.base import Strategy, StrategyContext
 from src.strategies.registry import load as load_strategies
+
+# 같은 (ticker, side) 조합에 대해 이 초 동안 중복 intent를 발행하지 않음
+_INTENT_COOLDOWN_SEC = 60.0
 
 
 class StrategyAgent(BaseAgent):
@@ -31,6 +35,8 @@ class StrategyAgent(BaseAgent):
         super().__init__(bus, state)
         self.strategies: list[Strategy] = load_strategies(strategy_names)
         self._extra_signals: dict[str, dict[str, float]] = defaultdict(dict)
+        # (ticker, side) → last emit timestamp
+        self._last_intent: dict[tuple[str, str], float] = {}
 
         weights = state.strategy_params.setdefault("strategy_weights", {})
         for s in self.strategies:
@@ -89,6 +95,13 @@ class StrategyAgent(BaseAgent):
         side, score = max(votes.items(), key=lambda kv: kv[1])
         if score < threshold:
             return
+
+        # 쿨다운: 같은 (ticker, side)를 60초 내 중복 발행 금지
+        key = (ticker, side)
+        now = time.monotonic()
+        if now - self._last_intent.get(key, 0.0) < _INTENT_COOLDOWN_SEC:
+            return
+        self._last_intent[key] = now
 
         await self.emit(
             "trade.intent",

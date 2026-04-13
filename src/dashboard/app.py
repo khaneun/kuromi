@@ -35,8 +35,26 @@ def create_app(
     app = FastAPI(title="Kuromi")
     clients: set[WebSocket] = set()
 
+    # 대시보드 Event Log에 표시할 토픽 (고빈도 노이즈 제외)
+    _LOG_TOPICS = {
+        "order.submitted", "order.accepted", "order.filled",
+        "order.cancelled", "order.failed",
+        "trade.approved",
+        "system.halt", "system.alert", "system.resume",
+        "improver.params_updated",
+        "performance.report",
+    }
+    # trade.rejected는 critical reason만 표시
+    _CRITICAL_REJECT = {"system_halted", "daily_loss_limit"}
+
     async def broadcast(event: Event) -> None:
         if not clients:
+            return
+        if event.topic == "trade.rejected":
+            reason = event.payload.get("reason", "") if isinstance(event.payload, dict) else ""
+            if reason not in _CRITICAL_REJECT:
+                return
+        elif event.topic not in _LOG_TOPICS:
             return
         msg = json.dumps(
             {"topic": event.topic, "source": event.source, "payload": _jsonable(event.payload)}
