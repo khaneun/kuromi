@@ -172,10 +172,24 @@ class ExecutionAgent(BaseAgent):
         if age > self.timeout_sec and next_state not in TERMINAL:
             try:
                 await self.client.cancel_order(order.uuid)
+                order.reason = "timeout"
+                next_state = OrderState.CANCELLED
             except Exception as exc:
                 self.log(f"cancel-on-timeout failed {order.uuid}: {exc}")
-            order.reason = "timeout"
-            next_state = OrderState.CANCELLED
+                # 취소 API 실패 시 실제 상태 재조회 (이미 체결됐을 수 있음)
+                try:
+                    recheck = await self.client.get_order(order.uuid)
+                    actual = recheck.get("state")
+                    if actual == "done":
+                        order.executed_volume = float(recheck.get("executed_volume") or 0.0)
+                        order.remaining_volume = float(recheck.get("remaining_volume") or 0.0)
+                        next_state = OrderState.FILLED
+                    elif actual == "cancel":
+                        order.reason = "timeout"
+                        next_state = OrderState.CANCELLED
+                    # else: 상태 유지 → 다음 poll에서 재시도
+                except Exception as exc2:
+                    self.log(f"recheck after cancel failure {order.uuid}: {exc2}")
 
         if next_state != order.state:
             await self._transition(order, next_state)

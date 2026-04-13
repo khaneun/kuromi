@@ -19,7 +19,7 @@ class UpbitClient:
     through the same query_hash signing path.
     """
 
-    def __init__(self, access_key: str = "", secret_key: str = "", timeout: float = 5.0) -> None:
+    def __init__(self, access_key: str = "", secret_key: str = "", timeout: float = 10.0) -> None:
         self.access_key = access_key
         self.secret_key = secret_key
         self._client = httpx.AsyncClient(base_url=UPBIT_BASE, timeout=timeout)
