@@ -31,19 +31,6 @@ class NotifierAgent(BaseAgent):
         topic = event.topic
         p = event.payload or {}
 
-        if topic == "order.filled":
-            side = p.get("side", "?")
-            ticker = p.get("ticker", "?")
-            price = p.get("price", 0)
-            volume = p.get("volume", 0)
-            icon = "🟢" if side == "buy" else "🔴"
-            return (
-                f"{icon} <b>체결</b>\n"
-                f"  {side.upper()} {ticker}\n"
-                f"  가격: <code>{price:,.0f}</code>\n"
-                f"  수량: <code>{volume:.6f}</code>"
-            )
-
         if topic == "order.failed":
             ticker = p.get("ticker", "?")
             reason = p.get("reason", "unknown")

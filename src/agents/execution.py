@@ -5,6 +5,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+import httpx
+
 from src.agents.base import BaseAgent
 from src.core.event_bus import Event, EventBus
 from src.core.state import SharedState
@@ -170,32 +172,50 @@ class ExecutionAgent(BaseAgent):
 
         age = (datetime.now(timezone.utc) - order.created_at).total_seconds()
         if age > self.timeout_sec and next_state not in TERMINAL:
-            try:
-                await self.client.cancel_order(order.uuid)
-                order.reason = "timeout"
-                next_state = OrderState.CANCELLED
-            except Exception as exc:
-                self.log(f"cancel-on-timeout failed {order.uuid}: {exc}")
-                # 취소 API 실패 시 실제 상태 재조회 (이미 체결됐을 수 있음)
-                try:
-                    recheck = await self.client.get_order(order.uuid)
-                    actual = recheck.get("state")
-                    if actual == "done":
-                        order.executed_volume = float(recheck.get("executed_volume") or 0.0)
-                        order.remaining_volume = float(recheck.get("remaining_volume") or 0.0)
-                        next_state = OrderState.FILLED
-                    elif actual == "cancel":
-                        order.reason = "timeout"
-                        next_state = OrderState.CANCELLED
-                    # else: 상태 유지 → 다음 poll에서 재시도
-                except Exception as exc2:
-                    self.log(f"recheck after cancel failure {order.uuid}: {exc2}")
+            next_state = await self._try_cancel(order)
 
         if next_state != order.state:
             await self._transition(order, next_state)
 
         if order.state in TERMINAL:
             self._active.pop(order.uuid, None)
+
+    async def _try_cancel(self, order: Order) -> OrderState:
+        """타임아웃 주문 취소. 최대 3회 시도, 이후 강제 CANCELLED."""
+        order.cancel_attempts += 1
+        if order.cancel_attempts > 3:
+            self.log(f"force-cancel {order.uuid} (시도 {order.cancel_attempts - 1}회 실패)")
+            order.reason = "timeout_force"
+            return OrderState.CANCELLED
+        try:
+            await self.client.cancel_order(order.uuid)
+            order.reason = "timeout"
+            return OrderState.CANCELLED
+        except httpx.HTTPStatusError as exc:
+            # 400: 이미 체결·취소된 주문 → 실제 상태 재조회
+            body = exc.response.text[:120] if exc.response else ""
+            self.log(f"cancel {exc.response.status_code} [{order.cancel_attempts}/3] {order.uuid}: {body}")
+            return await self._recheck_state(order)
+        except Exception as exc:
+            # 네트워크 timeout 등 → 재조회로 상태 확인
+            self.log(f"cancel 실패 [{order.cancel_attempts}/3] {order.uuid}: {exc}")
+            return await self._recheck_state(order)
+
+    async def _recheck_state(self, order: Order) -> OrderState:
+        """취소 실패 후 실제 주문 상태 재조회. 실패 시 현재 상태 유지(다음 poll 재시도)."""
+        try:
+            recheck = await self.client.get_order(order.uuid)
+            actual = recheck.get("state")
+            if actual == "done":
+                order.executed_volume = float(recheck.get("executed_volume") or 0.0)
+                order.remaining_volume = float(recheck.get("remaining_volume") or 0.0)
+                return OrderState.FILLED
+            if actual == "cancel":
+                order.reason = "timeout"
+                return OrderState.CANCELLED
+        except Exception as exc:
+            self.log(f"재조회 실패 {order.uuid}: {exc}")
+        return order.state  # 유지 → 다음 poll에서 재시도
 
     async def _transition(self, order: Order, new_state: OrderState) -> None:
         order.state = new_state
