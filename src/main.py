@@ -66,6 +66,11 @@ async def amain() -> None:
         bus,
         state,
         persistence=persistence,
+        # orchestrator는 start() 이후 주입 (아래 참조)
+        dashboard_url=(
+            settings.dashboard_public_url
+            or f"http://localhost:{settings.dashboard_port}"
+        ),
     )
     await telegram.start()
 
@@ -111,6 +116,9 @@ async def amain() -> None:
     orchestrator = Orchestrator(agents)
     orchestrator.install_signal_handlers(asyncio.get_running_loop())
     await orchestrator.start()
+
+    # orchestrator 생성 후 bot에 주입 (start() 이후이므로 안전)
+    telegram.orchestrator = orchestrator
 
     app = create_app(
         bus, state,

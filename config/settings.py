@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./data/kuromi.db"
     dashboard_host: str = "0.0.0.0"
     dashboard_port: int = 8080
+    dashboard_public_url: str = ""   # ex) http://3.35.45.73:8080 — Telegram /dashboard 용
     log_level: str = "INFO"
 
     initial_capital_krw: float = 0.0
