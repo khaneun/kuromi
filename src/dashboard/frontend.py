@@ -498,6 +498,7 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
     <div class="kpi-card">
       <div class="kpi-label">가용 잔고</div>
       <div class="kpi-value" id="kpi-available">-</div>
+      <div class="kpi-sub" id="kpi-locked" style="font-size:0.72rem;color:#94a3b8;margin-top:2px"></div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">미실현 손익</div>
@@ -818,6 +819,12 @@ function renderKPI(st) {
   var c = st.capital || {};
   $('kpi-equity').textContent = fmt(c.total_equity) + ' KRW';
   $('kpi-available').textContent = fmt(c.available_krw) + ' KRW';
+
+  var locked = c.locked_krw || 0;
+  var lockedEl = $('kpi-locked');
+  if (lockedEl) {
+    lockedEl.textContent = locked > 0 ? ('주문 중 ' + fmt(locked) + ' KRW') : '';
+  }
 
   var upnl = c.unrealized_pnl || 0;
   $('kpi-unrealized').textContent = fmt(upnl) + ' KRW';
