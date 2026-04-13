@@ -138,6 +138,9 @@ jobs:
                      --format '{{.Image}}' 2>/dev/null || echo "")
 
             echo "▶ 컨테이너 교체"
+            # 독립 실행 컨테이너가 포트를 점유하고 있으면 먼저 정리
+            docker stop kuromi 2>/dev/null || true
+            docker rm   kuromi 2>/dev/null || true
             export ECR_IMAGE SECRETS_NAME
             cd /opt/kuromi
             docker compose -f docker-compose.prod.yml up -d --remove-orphans
