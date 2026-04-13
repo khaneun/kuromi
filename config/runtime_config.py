@@ -10,10 +10,22 @@ from pydantic import BaseModel
 
 
 _DEFAULT_PATH = "data/runtime_config.json"
+_LOCK = threading.Lock()
+
+
+def _save_to_file(cfg: "RuntimeConfig", path: str) -> None:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = str(p) + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(cfg.model_dump(), f, ensure_ascii=False, indent=2)
+    os.replace(tmp, str(p))
 
 
 class RuntimeConfig(BaseModel):
     """Dashboard/운영 변경 가능한 설정. data/runtime_config.json에 저장."""
+
+    model_config = {"extra": "ignore"}
 
     dry_run: bool = True
     trading_tickers: list[str] = ["KRW-BTC", "KRW-ETH"]
@@ -28,11 +40,7 @@ class RuntimeConfig(BaseModel):
     llm_endpoint: str = ""
     log_level: str = "INFO"
 
-    _lock: threading.Lock = threading.Lock()
-    _path: str = _DEFAULT_PATH
-
-    class Config:
-        underscore_attrs_are_private = True
+    _file_path: str = _DEFAULT_PATH
 
     @classmethod
     def load_or_create(
@@ -46,33 +54,25 @@ class RuntimeConfig(BaseModel):
                 cfg = cls.model_validate(data)
             except Exception:
                 cfg = cls(**(defaults or {}))
-                cfg._save_to_file(path)
+                _save_to_file(cfg, path)
         else:
             cfg = cls(**(defaults or {}))
-            cfg._save_to_file(path)
-        cfg._path = path
+            _save_to_file(cfg, path)
+        cfg._file_path = path
         return cfg
 
     def save(self) -> None:
         """현재 설정을 파일에 원자적 저장."""
-        with self._lock:
-            self._save_to_file(self._path)
-
-    def _save_to_file(self, path: str) -> None:
-        p = Path(path)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = str(p) + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(self.model_dump(), f, ensure_ascii=False, indent=2)
-        os.replace(tmp, str(p))
+        with _LOCK:
+            _save_to_file(self, self._file_path)
 
     def update_and_save(self, updates: dict[str, Any]) -> None:
         """부분 업데이트 후 저장."""
-        with self._lock:
+        with _LOCK:
             for k, v in updates.items():
-                if hasattr(self, k) and not k.startswith("_"):
+                if k in self.model_fields:
                     setattr(self, k, v)
-            self._save_to_file(self._path)
+            _save_to_file(self, self._file_path)
 
     def apply(self, orchestrator: Any, state: Any, bus: Any = None) -> list[str]:
         """현재 설정을 실행 중인 Agent에 반영. 반환: 변경된 항목 목록."""
