@@ -106,6 +106,12 @@ class RuntimeConfig(BaseModel):
                 improver.model = self.llm_model
             applied.extend(["improver_cadence_sec", "llm_model"])
 
+        # PortfolioAgent: live mode 동기화
+        portfolio = orchestrator.get_agent("portfolio")
+        if portfolio and hasattr(portfolio, "live"):
+            portfolio.live = not self.dry_run
+            applied.append("portfolio_live")
+
         # StrategyAgent: decision_threshold, strategy_weights via state
         state.strategy_params["decision_threshold"] = self.decision_threshold
         if self.strategy_weights:

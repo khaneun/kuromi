@@ -100,12 +100,13 @@ body {
   padding: 16px;
 }
 .card-title {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 12px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
 }
 
 /* ===== KPI Cards ===== */
@@ -583,21 +584,24 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
       <div class="card-title">LLM 설정</div>
       <div class="form-group">
         <label class="form-label">Improver 모델</label>
-        <div class="llm-row">
-          <select class="form-select" id="cfg-llm-model" style="flex:1">
-            <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
-            <option value="claude-opus-4-6">Claude Opus 4.6</option>
-            <option value="gpt-4o">GPT-4o</option>
-            <option value="gpt-4o-mini">GPT-4o Mini</option>
-            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-          </select>
-          <span class="llm-badge llm-on" id="llm-status">Connected</span>
+        <div id="llm-active-display" style="display:flex;align-items:center;gap:8px;padding:10px;background:rgba(63,185,80,0.08);border:1px solid rgba(63,185,80,0.3);border-radius:6px;margin-bottom:8px">
+          <span style="width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0"></span>
+          <span style="font-size:0.88rem;font-weight:600;color:var(--green)" id="llm-active-name">-</span>
+          <span style="font-size:0.72rem;color:var(--muted);margin-left:auto">현재 사용 중</span>
         </div>
+        <select class="form-select" id="cfg-llm-model">
+          <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
+          <option value="claude-opus-4-6">Claude Opus 4.6</option>
+          <option value="gpt-4o">GPT-4o</option>
+          <option value="gpt-4o-mini">GPT-4o Mini</option>
+          <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+          <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+        </select>
+        <div class="form-note" style="margin-top:4px">다른 모델 선택 후 저장 버튼으로 적용</div>
       </div>
       <div class="form-group">
         <label class="form-label">Endpoint URL</label>
-        <input class="form-input" type="text" id="cfg-llm-endpoint" placeholder="비어있으면 기본 API 사용">
+        <input class="form-input" type="text" id="cfg-llm-endpoint" placeholder="비어있으면 기본 Anthropic/OpenAI/Google API">
       </div>
       <div class="form-note">API 키는 AWS Secrets Manager에서 관리됩니다.</div>
     </div>
@@ -645,8 +649,18 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
     <!-- 매매 종목 -->
     <div class="card settings-full">
       <div class="card-title">매매 종목</div>
-      <div class="ticker-note">모니터링할 종목을 선택하세요. StrategyAgent가 선택된 종목의 시그널을 분석합니다.</div>
-      <div class="ticker-chips" id="ticker-chips"></div>
+      <div class="ticker-note">StrategyAgent가 아래 종목들의 시그널을 분석합니다. 권장: 5개 이하 (많을수록 연산 부하 증가).</div>
+
+      <div class="form-label" style="margin-bottom:6px">선택된 종목 <span id="ticker-count-badge" style="font-size:0.75rem;color:var(--accent)"></span></div>
+      <div class="ticker-chips" id="ticker-selected"></div>
+
+      <div style="margin-top:18px;margin-bottom:8px;display:flex;gap:8px;align-items:center">
+        <input class="form-input" type="text" id="ticker-search" placeholder="종목 검색 (BTC, 비트코인...)" style="flex:1;font-size:0.82rem">
+        <button class="btn" onclick="selectRecommended()" style="white-space:nowrap">⭐ 추천 선택</button>
+        <button class="btn" onclick="clearAllTickers()" style="white-space:nowrap;color:var(--muted)">초기화</button>
+      </div>
+      <div class="ticker-note" style="margin-bottom:8px" id="ticker-search-hint">Upbit KRW 전체 종목 로딩 중...</div>
+      <div class="ticker-chips" id="ticker-available" style="max-height:180px;overflow-y:auto;padding:4px 0"></div>
     </div>
 
     <!-- 시스템 로그 -->
@@ -670,8 +684,9 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
     </div>
 
     <!-- 저장 -->
-    <div class="settings-full" style="text-align:right;padding-top:8px">
-      <button class="btn btn-primary" onclick="saveConfig()" style="padding:10px 32px;font-size:0.9rem">설정 저장</button>
+    <div class="settings-full" style="display:flex;justify-content:flex-end;align-items:center;gap:16px;padding-top:8px">
+      <span style="font-size:0.75rem;color:var(--muted)">LLM 모델 · 리스크 · 종목 저장 &nbsp;|&nbsp; 매매 모드는 버튼 클릭 시 즉시 반영</span>
+      <button class="btn btn-primary" onclick="saveConfig()" style="padding:10px 28px;font-size:0.9rem">저장</button>
     </div>
   </div>
 </div>
@@ -1027,12 +1042,16 @@ function renderImproverLog(logs) {
 var currentConfig = {};
 var currentTickers = [];
 var lastPrices = {};
-var UPBIT_POPULAR = [
-  'KRW-BTC','KRW-ETH','KRW-XRP','KRW-SOL','KRW-DOGE',
-  'KRW-ADA','KRW-AVAX','KRW-LINK','KRW-DOT','KRW-MATIC',
-  'KRW-ATOM','KRW-NEAR','KRW-APT','KRW-SUI','KRW-ARB',
-  'KRW-OP','KRW-AAVE','KRW-EOS','KRW-SAND','KRW-MANA'
-];
+var allUpbitMarkets = [];  // {code, name} fetched from Upbit
+var RECOMMENDED = ['KRW-BTC','KRW-ETH','KRW-XRP','KRW-SOL','KRW-DOGE','KRW-ADA','KRW-AVAX'];
+var LLM_NAMES = {
+  'claude-sonnet-4-6': 'Claude Sonnet 4.6',
+  'claude-opus-4-6': 'Claude Opus 4.6',
+  'gpt-4o': 'GPT-4o',
+  'gpt-4o-mini': 'GPT-4o Mini',
+  'gemini-2.5-pro': 'Gemini 2.5 Pro',
+  'gemini-2.5-flash': 'Gemini 2.5 Flash'
+};
 
 function setMode(dryRun) {
   if (!dryRun) {
@@ -1040,7 +1059,7 @@ function setMode(dryRun) {
   }
   api('/api/config', 'PUT', {dry_run: dryRun}).then(function() {
     updateModeUI(dryRun);
-    showToast(dryRun ? '모의매매 모드로 전환' : '실매매 모드로 전환', 'success');
+    showToast(dryRun ? '모의매매 모드로 전환' : '실매매 모드로 전환 (잔고 동기화까지 약 1분)', 'success');
   }).catch(function() { showToast('모드 전환 실패', 'error'); });
 }
 
@@ -1049,7 +1068,12 @@ function updateModeUI(dryRun) {
   $('mode-live').className = 'mode-btn' + (!dryRun ? ' sel-live' : '');
   $('mode-desc').textContent = dryRun
     ? '모의매매 모드입니다. 실제 주문이 실행되지 않습니다.'
-    : '실매매 모드입니다. 실제 자금으로 거래가 실행됩니다.';
+    : '실매매 모드입니다. Upbit 잔고 동기화 후 실제 자금으로 거래가 실행됩니다.';
+}
+
+function updateLLMDisplay(modelValue) {
+  var name = LLM_NAMES[modelValue] || modelValue;
+  $('llm-active-name').textContent = name;
 }
 
 function setupSliders() {
@@ -1066,6 +1090,23 @@ function setupSliders() {
   });
 }
 
+async function fetchUpbitMarkets() {
+  try {
+    var r = await fetch('https://api.upbit.com/v1/market/all?is_details=false');
+    var markets = await r.json();
+    allUpbitMarkets = markets
+      .filter(function(m) { return m.market.startsWith('KRW-'); })
+      .map(function(m) { return {code: m.market, name: m.korean_name}; })
+      .sort(function(a, b) { return a.code.localeCompare(b.code); });
+    $('ticker-search-hint').textContent = 'Upbit KRW 종목 ' + allUpbitMarkets.length + '개 로드됨. 검색어 입력 또는 아래 목록에서 선택.';
+    renderAvailableTickers('');
+  } catch(e) {
+    $('ticker-search-hint').textContent = 'Upbit 종목 로드 실패. 검색이 제한됩니다.';
+    allUpbitMarkets = RECOMMENDED.map(function(c) { return {code:c, name:c.replace('KRW-','')}; });
+    renderAvailableTickers('');
+  }
+}
+
 async function loadConfig() {
   try {
     var results = await Promise.all([api('/api/config'), api('/api/state')]);
@@ -1076,7 +1117,9 @@ async function loadConfig() {
 
     updateModeUI(!!cfg.dry_run);
 
-    if (cfg.llm_model) $('cfg-llm-model').value = cfg.llm_model;
+    var model = cfg.llm_model || 'claude-sonnet-4-6';
+    $('cfg-llm-model').value = model;
+    updateLLMDisplay(model);
     $('cfg-llm-endpoint').value = cfg.llm_endpoint || '';
 
     var pct1 = Math.round((cfg.per_trade_risk_pct || 0.01) * 100);
@@ -1096,32 +1139,87 @@ async function loadConfig() {
     $('decision-threshold-val').textContent = th + '%';
 
     currentTickers = cfg.trading_tickers || [];
-    renderTickerChips();
+    renderSelectedTickers();
+    fetchUpbitMarkets();
   } catch (e) {
     console.error('Config load error:', e);
   }
 }
 
-function renderTickerChips() {
-  var all = UPBIT_POPULAR.slice();
-  currentTickers.forEach(function(t) {
-    if (all.indexOf(t) === -1) all.push(t);
-  });
-  $('ticker-chips').innerHTML = all.map(function(t) {
-    var isActive = currentTickers.indexOf(t) !== -1;
+function renderSelectedTickers() {
+  var badge = $('ticker-count-badge');
+  if (badge) badge.textContent = '(' + currentTickers.length + '개)';
+  var el = $('ticker-selected');
+  if (!el) return;
+  if (currentTickers.length === 0) {
+    el.innerHTML = '<span style="font-size:0.78rem;color:var(--muted)">선택된 종목 없음</span>';
+    return;
+  }
+  el.innerHTML = currentTickers.map(function(t) {
     var sym = t.replace('KRW-','');
     var price = lastPrices[t];
     var priceHtml = price ? ' <span class="ticker-chip-price">' + fmt(price) + '</span>' : '';
-    return '<span class="ticker-chip' + (isActive ? ' active' : '') + '" onclick="toggleTicker(\\'' + t + '\\')">' +
-      '<span class="chip-dot"></span>' + sym + priceHtml + '</span>';
+    return '<span class="ticker-chip active" data-t="' + escHtml(t) + '" onclick="toggleTicker(this.dataset.t)">' +
+      '<span class="chip-dot"></span>' + escHtml(sym) + priceHtml +
+      ' <span style="color:var(--muted);font-size:0.9rem;margin-left:4px">&times;</span></span>';
   }).join('');
+}
+
+function renderAvailableTickers(search) {
+  var el = $('ticker-available');
+  if (!el) return;
+  var term = search.trim().toLowerCase();
+  var filtered = allUpbitMarkets.filter(function(m) {
+    if (currentTickers.indexOf(m.code) !== -1) return false;
+    if (!term) return RECOMMENDED.indexOf(m.code) !== -1;
+    return m.code.toLowerCase().indexOf(term) !== -1 || m.name.toLowerCase().indexOf(term) !== -1;
+  });
+  if (!term && filtered.length === 0 && allUpbitMarkets.length === 0) {
+    el.innerHTML = '';
+    return;
+  }
+  if (!term) {
+    el.innerHTML = '<span style="font-size:0.72rem;color:var(--muted);width:100%;margin-bottom:4px">추천 종목 (검색어 입력 시 전체 ' + allUpbitMarkets.length + '개 검색)</span>' +
+      filtered.map(function(m) {
+        var sym = m.code.replace('KRW-','');
+        return '<span class="ticker-chip" data-t="' + escHtml(m.code) + '" onclick="toggleTicker(this.dataset.t)">' +
+          '<span class="chip-dot"></span>' + escHtml(sym) +
+          ' <span style="font-size:0.7rem;color:var(--muted)">' + escHtml(m.name) + '</span></span>';
+      }).join('');
+  } else {
+    el.innerHTML = filtered.slice(0, 30).map(function(m) {
+      var sym = m.code.replace('KRW-','');
+      return '<span class="ticker-chip" data-t="' + escHtml(m.code) + '" onclick="toggleTicker(this.dataset.t)">' +
+        '<span class="chip-dot"></span>' + escHtml(sym) +
+        ' <span style="font-size:0.7rem;color:var(--muted)">' + escHtml(m.name) + '</span></span>';
+    }).join('') + (filtered.length > 30 ? '<span style="font-size:0.72rem;color:var(--muted)"> 외 ' + (filtered.length-30) + '개...</span>' : '');
+  }
 }
 
 function toggleTicker(ticker) {
   var idx = currentTickers.indexOf(ticker);
-  if (idx === -1) { currentTickers.push(ticker); }
-  else { currentTickers.splice(idx, 1); }
-  renderTickerChips();
+  if (idx === -1) {
+    currentTickers.push(ticker);
+  } else {
+    currentTickers.splice(idx, 1);
+  }
+  renderSelectedTickers();
+  renderAvailableTickers($('ticker-search') ? $('ticker-search').value : '');
+}
+
+function selectRecommended() {
+  currentTickers = RECOMMENDED.filter(function(t) {
+    return allUpbitMarkets.length === 0 || allUpbitMarkets.some(function(m) { return m.code === t; });
+  });
+  renderSelectedTickers();
+  renderAvailableTickers('');
+  showToast('추천 종목 7개 선택됨', 'success');
+}
+
+function clearAllTickers() {
+  currentTickers = [];
+  renderSelectedTickers();
+  renderAvailableTickers($('ticker-search') ? $('ticker-search').value : '');
 }
 
 async function refreshLogs() {
@@ -1148,6 +1246,7 @@ async function saveConfig() {
   };
   try {
     await api('/api/config', 'PUT', payload);
+    updateLLMDisplay(payload.llm_model);
     showToast('설정이 저장되었습니다.', 'success');
   } catch (e) {
     showToast('설정 저장에 실패했습니다.', 'error');
@@ -1226,6 +1325,10 @@ function initApp() {
   connectWS();
 
   setupSliders();
+
+  /* Ticker search */
+  var tsEl = $('ticker-search');
+  if (tsEl) tsEl.addEventListener('input', function() { renderAvailableTickers(tsEl.value); });
 
   /* Clock */
   setInterval(function() {
