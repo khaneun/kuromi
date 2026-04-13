@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -116,6 +117,33 @@ class ExecutionAgent(BaseAgent):
             order.uuid = result.get("uuid")
             if not order.uuid:
                 raise RuntimeError(f"no uuid in upbit response: {result}")
+            self._active[order.uuid] = order
+            await self._transition(order, OrderState.ACCEPTED)
+        except Exception as exc:
+            reason = str(exc)
+            order.reason = reason
+            # 잔고 부족·최소 금액 미달 등 영구 오류는 재시도 없이 즉시 실패
+            perm_errors = ("insufficient", "minimum", "below_min", "잔고", "금액")
+            if order.retry_count < 1 and not any(e in reason.lower() for e in perm_errors):
+                order.retry_count += 1
+                self.log(f"order failed ({reason}), retrying #{order.retry_count} for {order.ticker}")
+                await self._on_approved_retry(order)
+            else:
+                await self._transition(order, OrderState.FAILED)
+
+    async def _on_approved_retry(self, order: Order) -> None:
+        """재시도용 내부 메서드. 새 uuid로 주문을 재발행한다."""
+        await asyncio.sleep(2)
+        try:
+            result = await self.client.place_order(
+                market=order.ticker,
+                side=order.side,
+                price=order.price,
+                volume=order.volume,
+            )
+            order.uuid = result.get("uuid")
+            if not order.uuid:
+                raise RuntimeError(f"no uuid in retry response: {result}")
             self._active[order.uuid] = order
             await self._transition(order, OrderState.ACCEPTED)
         except Exception as exc:

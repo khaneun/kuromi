@@ -15,6 +15,7 @@ INDEX_HTML = """
   --accent: #58a6ff;
   --green: #3fb950;
   --red: #f85149;
+  --blue: #388bfd;
   --yellow: #d29922;
   --muted: #8b949e;
 }
@@ -168,8 +169,10 @@ td {
   border-bottom: 1px solid var(--border);
 }
 tr:hover td { background: rgba(88,166,255,0.04); }
-.pos { color: var(--green); }
-.neg { color: var(--red); }
+/* 한국 증권 컨벤션: 상승/매수/이익=빨강, 하락/매도/손실=파랑, 보합=회색 */
+.pos { color: var(--red); }
+.neg { color: var(--blue); }
+.neutral { color: var(--muted); }
 
 /* ===== Dashboard grid ===== */
 .dash-grid {
@@ -719,7 +722,7 @@ function pct(n) {
   var v = (n * 100).toFixed(2);
   return (n >= 0 ? '+' : '') + v + '%';
 }
-function cls(n) { return n >= 0 ? 'pos' : 'neg'; }
+function cls(n) { return n > 0 ? 'pos' : n < 0 ? 'neg' : 'neutral'; }
 function relTime(ts) {
   if (!ts) return '-';
   var now = Date.now() / 1000;
@@ -881,15 +884,21 @@ function renderOrders(orders) {
     $('orders-body').innerHTML = '<tr><td colspan="5" class="empty-msg">최근 주문이 없습니다.</td></tr>';
     return;
   }
+  var STATE_KO = {
+    'submitted': '제출됨', 'accepted': '접수됨', 'partially_filled': '부분체결',
+    'filled': '체결완료', 'cancelled': '취소됨', 'failed': '실패'
+  };
   $('orders-body').innerHTML = orders.map(function(o) {
     var side = o.side === 'buy' ? '매수' : '매도';
     var sideClass = o.side === 'buy' ? 'pos' : 'neg';
+    var stateLabel = STATE_KO[o.state] || o.state;
+    var stateClass = o.state === 'failed' ? 'neg' : o.state === 'filled' ? 'pos' : '';
     return '<tr>' +
       '<td>' + (o.created_at || '').slice(5, 16) + '</td>' +
       '<td class="' + sideClass + '">' + side + '</td>' +
       '<td>' + escHtml(o.ticker) + '</td>' +
       '<td>' + fmt(o.price) + '</td>' +
-      '<td>' + escHtml(o.state) + '</td>' +
+      '<td class="' + stateClass + '">' + stateLabel + '</td>' +
       '</tr>';
   }).join('');
 }
@@ -901,7 +910,7 @@ function renderTrades(trades) {
   }
   $('trades-body').innerHTML = trades.map(function(t) {
     var side = t.side === 'buy' ? '매수' : '매도';
-    var sideClass = t.side === 'buy' ? 'pos' : 'neg';
+    var sideClass = t.side === 'buy' ? 'pos' : 'neg';  /* 매수=빨강, 매도=파랑 */
     return '<tr>' +
       '<td>' + (t.ts || '').slice(5, 16) + '</td>' +
       '<td class="' + sideClass + '">' + side + '</td>' +
