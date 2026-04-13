@@ -957,7 +957,7 @@ function renderAgentGrid(agents) {
     var lastError = m.last_error || null;
     var errorSection = '';
     if (lastError) {
-      errorSection = '<div class="agent-error" onclick="this.classList.toggle(\'expanded\')">' +
+      errorSection = '<div class="agent-error" onclick="this.classList.toggle(\\'expanded\\')">' +
         '<strong>최근 에러</strong> (클릭하여 펼치기)' +
         '<div class="agent-error-detail">' + escHtml(lastError) + '</div>' +
         '</div>';
