@@ -46,11 +46,9 @@ class Settings(BaseSettings):
 
         client = boto3.client("secretsmanager", region_name=self.aws_region)
         raw = client.get_secret_value(SecretId=self.secrets_name)["SecretString"]
-        for k, v in json.loads(raw).items():
-            key = k.lower()
-            if hasattr(self, key):
-                setattr(self, key, v)
-        return self
+        overrides = {k.lower(): v for k, v in json.loads(raw).items()}
+        merged = {**self.model_dump(), **overrides}
+        return Settings.model_validate(merged)
 
 
 @lru_cache
