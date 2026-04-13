@@ -651,7 +651,10 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
 
     <!-- 매매 종목 -->
     <div class="card settings-full">
-      <div class="card-title">매매 종목</div>
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:baseline">
+        <span>매매 종목</span>
+        <span id="ticker-advice-ts" style="font-size:0.68rem;color:var(--muted);font-weight:400"></span>
+      </div>
       <div class="ticker-note">StrategyAgent가 아래 종목들의 시그널을 분석합니다. 권장: 5개 이하 (많을수록 연산 부하 증가).</div>
 
       <div class="form-label" style="margin-bottom:6px">선택된 종목 <span id="ticker-count-badge" style="font-size:0.75rem;color:var(--accent)"></span></div>
@@ -1074,6 +1077,7 @@ var lastPrices = {};
 var lastSignals = {};    // C: 티커별 시그널 요약 {avg, momentum, ...}
 var lastCapital = {};    // A: 최신 capital snapshot (포지션 손익 포함)
 var tickerAdvice = {add: [], remove: []};  // B: ImproverAgent 편입/편출 추천
+var tickerAdviceTs = 0;  // Unix timestamp of last ticker advice update
 var allUpbitMarkets = [];  // {code, name} fetched from Upbit
 var RECOMMENDED = ['KRW-BTC','KRW-ETH','KRW-XRP','KRW-SOL','KRW-DOGE','KRW-ADA','KRW-AVAX'];
 var LLM_NAMES = {
@@ -1180,13 +1184,24 @@ async function loadConfig() {
     api('/api/improver/ticker-advice').then(function(adv) {
       if (adv && (adv.add || adv.remove)) {
         tickerAdvice = {add: adv.add || [], remove: adv.remove || []};
+        if (adv.ts) tickerAdviceTs = adv.ts;
         renderSelectedTickers();
         renderAvailableTickers($('ticker-search') ? $('ticker-search').value : '');
+        renderTickerAdviceTs();
       }
     }).catch(function() {});
   } catch (e) {
     console.error('Config load error:', e);
   }
+}
+
+function renderTickerAdviceTs() {
+  var el = $('ticker-advice-ts');
+  if (!el) return;
+  if (!tickerAdviceTs) { el.textContent = ''; return; }
+  var mins = Math.round((Date.now() / 1000 - tickerAdviceTs) / 60);
+  var label = mins < 1 ? '방금' : (mins < 60 ? mins + '분 전' : Math.floor(mins / 60) + '시간 전');
+  el.textContent = '추천 ' + label + ' 업데이트 (3시간 주기)';
 }
 
 function renderSelectedTickers() {
@@ -1378,6 +1393,16 @@ function connectWS() {
     try {
       var d = JSON.parse(e.data);
       if (d.topic === 'heartbeat') return;
+      // 3시간 배치: ImproverAgent 티커 추천 갱신 → Settings 탭 자동 반영
+      if (d.topic === 'improver.ticker_advice' && d.payload) {
+        tickerAdvice = {add: d.payload.add || [], remove: d.payload.remove || []};
+        tickerAdviceTs = d.payload.ts || (Date.now() / 1000);
+        if (currentTab === 'settings') {
+          renderSelectedTickers();
+          renderAvailableTickers($('ticker-search') ? $('ticker-search').value : '');
+          renderTickerAdviceTs();
+        }
+      }
       var log = $('event-log');
       var time = new Date().toLocaleTimeString('ko-KR');
       var entry = document.createElement('div');

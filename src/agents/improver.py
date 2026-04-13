@@ -47,6 +47,7 @@ class ImproverAgent(BaseAgent):
         self._last_report: dict | None = None
         self._feedback_log: deque[dict] = deque(maxlen=100)
         self._ticker_advice: dict = {"add": [], "remove": []}  # B: 최신 티커 편입/편출 추천
+        self._last_advice_ts: float = 0.0
         self._log_path = "data/improver_log.jsonl"
         self._load_log()
         self.subscribe("performance.report", self._on_report)
@@ -91,6 +92,12 @@ class ImproverAgent(BaseAgent):
                         "add": [t for t in advice.get("add", []) if isinstance(t, str)],
                         "remove": [t for t in advice.get("remove", []) if isinstance(t, str)],
                     }
+                    self._last_advice_ts = time.time()
+                    await self.emit("improver.ticker_advice", {
+                        "add": self._ticker_advice["add"],
+                        "remove": self._ticker_advice["remove"],
+                        "ts": self._last_advice_ts,
+                    })
                 if updates:
                     await self.emit("improver.params_updated", updates)
                 self._append_log({
@@ -125,8 +132,8 @@ class ImproverAgent(BaseAgent):
         return list(self._feedback_log)
 
     def ticker_advice(self) -> dict:
-        """B: 최신 LLM 티커 편입/편출 추천."""
-        return dict(self._ticker_advice)
+        """B: 최신 LLM 티커 편입/편출 추천 (ts: Unix timestamp of last update)."""
+        return {**self._ticker_advice, "ts": self._last_advice_ts}
 
     async def _ask_llm(self, report: dict, params: dict) -> dict:
         from anthropic import AsyncAnthropic

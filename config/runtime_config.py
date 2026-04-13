@@ -32,7 +32,7 @@ class RuntimeConfig(BaseModel):
     max_concurrent_positions: int = 3
     per_trade_risk_pct: float = 0.01
     daily_loss_limit_pct: float = 0.03
-    improver_cadence_sec: int = 3600
+    improver_cadence_sec: int = 10800
     usdkrw_rate: float = 1380.0
     decision_threshold: float = 0.5
     strategy_weights: dict[str, float] = {}
