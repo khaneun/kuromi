@@ -5,7 +5,7 @@ INDEX_HTML = """
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Kuromi Dashboard</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
 :root {
   --bg: #0d1117;
@@ -1175,7 +1175,7 @@ function connectWS() {
 
 /* ========== Init ========== */
 function initApp() {
-  initChart();
+  try { initChart(); } catch(e) { console.warn('Chart.js init failed:', e); }
   connectWS();
 
   $('cfg-dryrun').addEventListener('change', updateDryRunLabel);
