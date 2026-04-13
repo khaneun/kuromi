@@ -1,0 +1,28 @@
+# ── EC2 프로덕션 배포용 ───────────────────────────────────────────────────────
+# 사용법: docker-compose -f docker-compose.prod.yml up -d
+services:
+  app:
+    image: ${ECR_IMAGE}          # CI/CD가 주입: <account>.dkr.ecr.<region>.amazonaws.com/kuromi:<sha>
+    env_file: /opt/kuromi/.env   # 민감하지 않은 값만. 나머지는 Secrets Manager
+    environment:
+      - ENV=prod
+      - AWS_REGION=ap-northeast-2
+      - SECRETS_NAME=${SECRETS_NAME:-kuromi/prod}
+    volumes:
+      - /opt/kuromi/data:/app/data
+      - /opt/kuromi/logs:/app/logs
+    ports:
+      - "8080:8080"
+    restart: always
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/state')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 5

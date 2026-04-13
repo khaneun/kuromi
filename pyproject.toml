@@ -1,0 +1,40 @@
+[project]
+name = "kuromi"
+version = "0.1.0"
+description = "Upbit 기반 자가개선 멀티 Agent 자동매매 시스템"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.27",
+  "websockets>=12",
+  "pyjwt>=2.8",
+  "pydantic>=2.6",
+  "pydantic-settings>=2.2",
+  "boto3>=1.34",
+  "sqlalchemy>=2.0",
+  "aiosqlite>=0.20",
+  "loguru>=0.7",
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.29",
+  "python-telegram-bot>=21",
+  "apscheduler>=3.10",
+  "anthropic>=0.34",
+  "pandas>=2.2",
+  "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-asyncio>=0.23", "ruff>=0.4", "mypy>=1.10"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src", "config"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

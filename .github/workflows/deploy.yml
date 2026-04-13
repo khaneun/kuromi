@@ -1,0 +1,166 @@
+name: CI / Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      force_deploy:
+        description: "강제 배포 (lint 실패 무시)"
+        type: boolean
+        default: false
+
+env:
+  AWS_REGION: ap-northeast-2
+  ECR_REPOSITORY: kuromi
+  COMPOSE_FILE: docker-compose.prod.yml
+
+jobs:
+  # ──────────────────────────────────────────────
+  lint:
+    name: Lint & Syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dev deps
+        run: pip install ruff
+
+      - name: Ruff lint
+        run: ruff check src config
+
+      - name: Syntax check
+        run: python -m compileall -q src config
+
+  # ──────────────────────────────────────────────
+  build-push:
+    name: Build & Push to ECR
+    needs: lint
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.image.outputs.uri }}
+      sha: ${{ steps.meta.outputs.sha }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Image metadata
+        id: meta
+        run: |
+          SHA=$(echo ${{ github.sha }} | head -c 8)
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          echo "tag=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:$SHA" >> $GITHUB_OUTPUT
+          echo "latest=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --cache-from ${{ steps.meta.outputs.latest }} \
+            --tag ${{ steps.meta.outputs.tag }} \
+            --tag ${{ steps.meta.outputs.latest }} \
+            .
+
+      - name: Push to ECR
+        run: |
+          docker push ${{ steps.meta.outputs.tag }}
+          docker push ${{ steps.meta.outputs.latest }}
+
+      - name: Output image URI
+        id: image
+        run: echo "uri=${{ steps.meta.outputs.tag }}" >> $GITHUB_OUTPUT
+
+  # ──────────────────────────────────────────────
+  deploy:
+    name: Deploy to EC2
+    needs: build-push
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Copy compose file to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          source: "docker-compose.prod.yml"
+          target: "/opt/kuromi"
+
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          ECR_IMAGE: ${{ needs.build-push.outputs.image }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          SECRETS_NAME: ${{ secrets.SECRETS_NAME }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: ECR_IMAGE,AWS_ACCOUNT_ID,SECRETS_NAME
+          script: |
+            set -euo pipefail
+
+            echo "▶ ECR 로그인"
+            aws ecr get-login-password --region ap-northeast-2 \
+              | docker login --username AWS --password-stdin \
+                  "${AWS_ACCOUNT_ID}.dkr.ecr.ap-northeast-2.amazonaws.com"
+
+            echo "▶ 이미지 Pull: $ECR_IMAGE"
+            docker pull "$ECR_IMAGE"
+
+            echo "▶ 이전 컨테이너 태그 저장 (rollback용)"
+            PREV=$(docker ps --filter name=kuromi_app \
+                     --format '{{.Image}}' 2>/dev/null || echo "")
+
+            echo "▶ 컨테이너 교체"
+            export ECR_IMAGE SECRETS_NAME
+            cd /opt/kuromi
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+
+            echo "▶ Health check (최대 90초)"
+            for i in $(seq 1 18); do
+              sleep 5
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+                http://localhost:8080/api/state || echo "000")
+              if [ "$STATUS" = "200" ]; then
+                echo "  Health OK (${i}번째 시도)"
+                break
+              fi
+              if [ "$i" = "18" ]; then
+                echo "  ❌ Health check 실패 — rollback 시작"
+                if [ -n "$PREV" ]; then
+                  ECR_IMAGE="$PREV" docker compose -f docker-compose.prod.yml up -d
+                fi
+                exit 1
+              fi
+            done
+
+            echo "▶ 미사용 이미지 정리"
+            docker image prune -f
+
+            echo "✅ 배포 완료: $ECR_IMAGE"

@@ -1,0 +1,20 @@
+[Unit]
+Description=Kuromi Upbit auto-trader
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/kuromi
+Environment=ENV=prod
+Environment=AWS_REGION=ap-northeast-2
+Environment=SECRETS_NAME=kuromi/prod
+ExecStart=/opt/kuromi/.venv/bin/python -m src.main
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

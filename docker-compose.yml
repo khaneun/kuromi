@@ -1,0 +1,23 @@
+# ── 로컬 개발용 ──────────────────────────────────────────────────────────────
+services:
+  app:
+    build:
+      context: .
+      target: runtime
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      # 소스 마운트: 코드 변경 시 재빌드 없이 반영 (dev 전용)
+      - ./src:/app/src
+      - ./config:/app/config
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/state')"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
