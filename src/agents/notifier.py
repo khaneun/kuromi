@@ -62,8 +62,13 @@ class NotifierAgent(BaseAgent):
             return f"⚠️ <b>시스템 알림</b>\n{msg}"
 
         if topic == "improver.params_updated":
-            keys = list(p.keys()) if isinstance(p, dict) else []
-            return f"🤖 <b>Improver 파라미터 업데이트</b>\n항목: {keys}"
+            if not isinstance(p, dict) or not p:
+                return "🤖 <b>Improver 파라미터 업데이트</b>\n변경 없음"
+            lines = "\n".join(
+                f"  <code>{k}</code>: <code>{v}</code>"
+                for k, v in p.items()
+            )
+            return f"🤖 <b>Improver 파라미터 업데이트</b> ({len(p)}건)\n{lines}"
 
         if topic == "performance.report":
             win = p.get("win_rate", 0) if isinstance(p, dict) else 0
