@@ -305,6 +305,16 @@ tr:hover td { background: rgba(88,166,255,0.04); }
 .improver-source-seed { background: var(--accent); color: #000; }
 .improver-source-llm { background: var(--yellow); color: #000; }
 .improver-keys { color: var(--text); margin-top: 2px; }
+.improver-reasoning {
+  color: var(--muted); font-size: 0.72rem; margin-top: 3px;
+  font-style: italic; line-height: 1.4;
+}
+.improver-chart-wrap {
+  position: relative; height: 220px; margin-bottom: 4px;
+}
+.improver-chart-hint {
+  text-align: right; font-size: 0.65rem; color: var(--muted); margin-bottom: 12px;
+}
 
 /* ===== Settings ===== */
 .settings-grid {
@@ -559,7 +569,14 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
   <div class="agent-grid" id="agent-grid"></div>
 
   <div class="card" style="margin-top:8px">
-    <div class="card-title">Improver 피드백 로그</div>
+    <div class="card-title">Improver 파라미터 변화 추이</div>
+    <div class="improver-chart-wrap">
+      <canvas id="improver-params-chart"></canvas>
+    </div>
+    <div class="improver-chart-hint" id="improver-chart-hint" style="display:none">
+      범례 클릭 → 특정 파라미터 표시/숨김
+    </div>
+    <div class="card-title" style="font-size:0.8rem;margin:12px 0 8px">변경 이력</div>
     <div class="improver-timeline" id="improver-timeline">
       <div class="empty-msg">피드백 로그가 없습니다.</div>
     </div>
@@ -959,6 +976,7 @@ function renderTrades(trades) {
 
 /* ===== Equity Chart ===== */
 var eqChart = null;
+var improverParamsChart = null;
 function initChart() {
   var ctx = $('equity-chart').getContext('2d');
   eqChart = new Chart(ctx, {
@@ -1075,10 +1093,89 @@ function renderAgentGrid(agents) {
 async function refreshImproverLog() {
   try {
     var logs = await api('/api/improver/log');
+    renderImproverChart(logs);
     renderImproverLog(logs);
   } catch (e) {
     console.error('Improver log error:', e);
   }
+}
+
+function renderImproverChart(logs) {
+  var canvas = $('improver-params-chart');
+  if (!canvas) return;
+  // 파라미터 변경이 있는 항목만
+  var entries = (logs || []).filter(function(e) {
+    return e.updates && typeof e.updates === 'object' && Object.keys(e.updates).length > 0;
+  });
+  if (improverParamsChart) { improverParamsChart.destroy(); improverParamsChart = null; }
+  if (entries.length === 0) return;
+  $('improver-chart-hint').style.display = '';
+
+  // 등장한 파라미터 이름 수집
+  var paramSet = {};
+  entries.forEach(function(e) { Object.keys(e.updates).forEach(function(k) { paramSet[k] = true; }); });
+  var paramNames = Object.keys(paramSet);
+
+  // X축 레이블 (KST 시간 문자열)
+  var labels = entries.map(function(e) {
+    return new Date(e.ts * 1000).toLocaleString('ko-KR', {
+      timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false
+    });
+  });
+
+  var COLORS = ['#58a6ff','#3fb950','#d29922','#f85149','#bc8cff','#56d364','#ff7b72','#79c0ff','#ffa657','#a5d6ff'];
+  var datasets = paramNames.map(function(param, i) {
+    var data = [];
+    var lastVal = null;
+    entries.forEach(function(e) {
+      if (e.updates[param] !== undefined) lastVal = Number(e.updates[param]);
+      data.push(lastVal);  // 이전 값 carry-forward (null이면 해당 시점 아직 미등장)
+    });
+    return {
+      label: param,
+      data: data,
+      borderColor: COLORS[i % COLORS.length],
+      borderWidth: 2,
+      pointRadius: 4,
+      pointHoverRadius: 6,
+      stepped: 'before',
+      tension: 0,
+      fill: false,
+      spanGaps: false,
+    };
+  });
+
+  improverParamsChart = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: { labels: labels, datasets: datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: {
+          ticks: { color: '#8b949e', font: { size: 10 }, maxRotation: 30, maxTicksLimit: 8 },
+          grid: { color: '#21262d' }
+        },
+        y: {
+          ticks: { color: '#8b949e', font: { size: 10 } },
+          grid: { color: '#21262d' }
+        }
+      },
+      plugins: {
+        legend: { labels: { color: '#8b949e', boxWidth: 10, font: { size: 10 }, padding: 10 } },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              return ctx.dataset.label + ': ' + (ctx.parsed.y !== null ? ctx.parsed.y : '-');
+            }
+          }
+        }
+      }
+    }
+  });
 }
 
 function renderImproverLog(logs) {
@@ -1086,15 +1183,24 @@ function renderImproverLog(logs) {
     $('improver-timeline').innerHTML = '<div class="empty-msg">피드백 로그가 없습니다.</div>';
     return;
   }
-  $('improver-timeline').innerHTML = logs.map(function(entry) {
+  // 최신순 표시
+  var sorted = logs.slice().reverse();
+  $('improver-timeline').innerHTML = sorted.map(function(entry) {
     var sourceClass = entry.source === 'seed' ? 'improver-source-seed' : 'improver-source-llm';
     var sourceLabel = entry.source === 'seed' ? 'SEED' : 'LLM';
-    var keys = Array.isArray(entry.updated_keys) ? entry.updated_keys.join(', ') : (entry.updated_keys || '-');
+    // updates: {k:v} → "k, k2" 목록
+    var updates = entry.updates && typeof entry.updates === 'object' ? entry.updates : {};
+    var keys = Object.keys(updates);
+    var keysStr = keys.length > 0 ? keys.join(', ') : '변경 없음';
+    var reasoningHtml = entry.reasoning
+      ? '<div class="improver-reasoning">' + escHtml(entry.reasoning) + '</div>'
+      : '';
     return '<div class="improver-entry">' +
-      '<div class="improver-ts">' + fmtKST(entry.timestamp) +
+      '<div class="improver-ts">' + fmtKST(new Date(entry.ts * 1000).toISOString()) +
         '<span class="improver-source ' + sourceClass + '">' + sourceLabel + '</span>' +
       '</div>' +
-      '<div class="improver-keys">변경: ' + escHtml(keys) + '</div>' +
+      '<div class="improver-keys">변경: ' + escHtml(keysStr) + '</div>' +
+      reasoningHtml +
       '</div>';
   }).join('');
 }
