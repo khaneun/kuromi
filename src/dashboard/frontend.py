@@ -309,12 +309,38 @@ tr:hover td { background: rgba(88,166,255,0.04); }
   color: var(--muted); font-size: 0.72rem; margin-top: 3px;
   font-style: italic; line-height: 1.4;
 }
-.improver-chart-wrap {
-  position: relative; height: 220px; margin-bottom: 4px;
+.params-modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.72); z-index: 1000;
+  overflow-y: auto; padding: 24px 16px;
 }
-.improver-chart-hint {
-  text-align: right; font-size: 0.65rem; color: var(--muted); margin-bottom: 12px;
+.params-modal {
+  max-width: 980px; margin: 0 auto;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 20px;
 }
+.params-modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16px;
+}
+.params-modal-title { font-weight: 700; font-size: 1rem; }
+.params-modal-close {
+  background: none; border: 1px solid var(--border); color: var(--text);
+  border-radius: 4px; padding: 2px 10px; cursor: pointer; font-size: 1rem;
+}
+.params-mini-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+}
+@media (max-width: 720px) { .params-mini-grid { grid-template-columns: 1fr 1fr; } }
+.params-mini-card {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px;
+}
+.params-mini-title {
+  font-size: 0.7rem; font-weight: 600; color: var(--muted); margin-bottom: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.params-mini-chart { position: relative; height: 100px; }
 
 /* ===== Settings ===== */
 .settings-grid {
@@ -569,16 +595,27 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
   <div class="agent-grid" id="agent-grid"></div>
 
   <div class="card" style="margin-top:8px">
-    <div class="card-title">Improver 파라미터 변화 추이</div>
-    <div class="improver-chart-wrap">
-      <canvas id="improver-params-chart"></canvas>
-    </div>
-    <div class="improver-chart-hint" id="improver-chart-hint" style="display:none">
-      범례 클릭 → 특정 파라미터 표시/숨김
-    </div>
-    <div class="card-title" style="font-size:0.8rem;margin:12px 0 8px">변경 이력</div>
+    <div class="card-title">Improver 변경 이력</div>
     <div class="improver-timeline" id="improver-timeline">
       <div class="empty-msg">피드백 로그가 없습니다.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Improver 파라미터 히스토리 모달 ===== -->
+<div class="params-modal-overlay" id="params-modal-overlay" onclick="closeParamsModal(event)">
+  <div class="params-modal" onclick="event.stopPropagation()">
+    <div class="params-modal-header">
+      <span class="params-modal-title">Improver 파라미터 히스토리</span>
+      <button class="params-modal-close" onclick="closeParamsModal()">✕</button>
+    </div>
+    <div class="params-mini-grid" id="params-mini-grid">
+      <div class="empty-msg" style="grid-column:1/-1">파라미터 변경 이력이 없습니다.</div>
+    </div>
+    <div style="margin-top:12px;font-size:0.7rem;color:var(--muted)">
+      <span style="color:#f85149">●</span> 익절 우세 (승률&gt;50%) &nbsp;
+      <span style="color:#58a6ff">●</span> 손절 우세 (승률≤50%) &nbsp;
+      <span style="color:#8b949e">●</span> 미분류
     </div>
   </div>
 </div>
@@ -976,7 +1013,8 @@ function renderTrades(trades) {
 
 /* ===== Equity Chart ===== */
 var eqChart = null;
-var improverParamsChart = null;
+var improverLogsCache = [];
+var improverMiniCharts = [];
 function initChart() {
   var ctx = $('equity-chart').getContext('2d');
   eqChart = new Chart(ctx, {
@@ -1071,6 +1109,12 @@ function renderAgentGrid(agents) {
         '</div>';
     }
 
+    var improverBtn = a.name === 'improver'
+      ? '<button onclick="openParamsModal()" style="width:100%;margin-top:10px;padding:5px 0;' +
+        'background:none;border:1px solid var(--border);color:var(--accent);border-radius:5px;' +
+        'cursor:pointer;font-size:0.78rem">📊 파라미터 히스토리</button>'
+      : '';
+
     return '<div class="agent-card">' +
       '<div class="agent-header">' +
         '<span class="agent-dot ' + dotClass + '"></span>' +
@@ -1086,6 +1130,7 @@ function renderAgentGrid(agents) {
         '<div class="agent-metric-row"><span class="agent-metric-label">마지막 활동</span><span>' + relTime(m.last_activity_ts) + '</span></div>' +
       '</div>' +
       errorSection +
+      improverBtn +
       '</div>';
   }).join('');
 }
@@ -1093,30 +1138,47 @@ function renderAgentGrid(agents) {
 async function refreshImproverLog() {
   try {
     var logs = await api('/api/improver/log');
-    renderImproverChart(logs);
-    renderImproverLog(logs);
+    improverLogsCache = logs || [];
+    renderImproverLog(improverLogsCache);
   } catch (e) {
     console.error('Improver log error:', e);
   }
 }
 
-function renderImproverChart(logs) {
-  var canvas = $('improver-params-chart');
-  if (!canvas) return;
+function openParamsModal() {
+  $('params-modal-overlay').style.display = 'block';
+  document.body.style.overflow = 'hidden';
+  renderParamsMiniCharts(improverLogsCache);
+}
+
+function closeParamsModal(e) {
+  if (e && e.target !== $('params-modal-overlay')) return;
+  $('params-modal-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+  improverMiniCharts.forEach(function(c) { try { c.destroy(); } catch(_) {} });
+  improverMiniCharts = [];
+}
+
+function renderParamsMiniCharts(logs) {
+  improverMiniCharts.forEach(function(c) { try { c.destroy(); } catch(_) {} });
+  improverMiniCharts = [];
+  var grid = $('params-mini-grid');
+
   // 파라미터 변경이 있는 항목만
   var entries = (logs || []).filter(function(e) {
     return e.updates && typeof e.updates === 'object' && Object.keys(e.updates).length > 0;
   });
-  if (improverParamsChart) { improverParamsChart.destroy(); improverParamsChart = null; }
-  if (entries.length === 0) return;
-  $('improver-chart-hint').style.display = '';
+  if (entries.length === 0) {
+    grid.innerHTML = '<div class="empty-msg" style="grid-column:1/-1">파라미터 변경 이력이 없습니다.</div>';
+    return;
+  }
 
-  // 등장한 파라미터 이름 수집
+  // 전체 파라미터 이름 수집
   var paramSet = {};
   entries.forEach(function(e) { Object.keys(e.updates).forEach(function(k) { paramSet[k] = true; }); });
   var paramNames = Object.keys(paramSet);
 
-  // X축 레이블 (KST 시간 문자열)
+  // X축 레이블
   var labels = entries.map(function(e) {
     return new Date(e.ts * 1000).toLocaleString('ko-KR', {
       timeZone: 'Asia/Seoul', month: '2-digit', day: '2-digit',
@@ -1124,57 +1186,92 @@ function renderImproverChart(logs) {
     });
   });
 
-  var COLORS = ['#58a6ff','#3fb950','#d29922','#f85149','#bc8cff','#56d364','#ff7b72','#79c0ff','#ffa657','#a5d6ff'];
-  var datasets = paramNames.map(function(param, i) {
-    var data = [];
+  grid.innerHTML = '';
+  paramNames.forEach(function(param) {
+    var data = [], pointColors = [], pointRadii = [], hoverRadii = [];
     var lastVal = null;
     entries.forEach(function(e) {
-      if (e.updates[param] !== undefined) lastVal = Number(e.updates[param]);
-      data.push(lastVal);  // 이전 값 carry-forward (null이면 해당 시점 아직 미등장)
+      var changed = e.updates[param] !== undefined;
+      if (changed) lastVal = Number(e.updates[param]);
+      data.push(lastVal);
+      // 변경 시점에만 dot 표시
+      if (changed && lastVal !== null) {
+        var wr = e.win_rate;
+        var col = wr == null ? '#8b949e' : (wr > 0.5 ? '#f85149' : '#58a6ff');
+        pointColors.push(col);
+        pointRadii.push(5);
+        hoverRadii.push(7);
+      } else {
+        pointColors.push('transparent');
+        pointRadii.push(0);
+        hoverRadii.push(0);
+      }
     });
-    return {
-      label: param,
-      data: data,
-      borderColor: COLORS[i % COLORS.length],
-      borderWidth: 2,
-      pointRadius: 4,
-      pointHoverRadius: 6,
-      stepped: 'before',
-      tension: 0,
-      fill: false,
-      spanGaps: false,
-    };
-  });
 
-  improverParamsChart = new Chart(canvas.getContext('2d'), {
-    type: 'line',
-    data: { labels: labels, datasets: datasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: false,
-      interaction: { mode: 'index', intersect: false },
-      scales: {
-        x: {
-          ticks: { color: '#8b949e', font: { size: 10 }, maxRotation: 30, maxTicksLimit: 8 },
-          grid: { color: '#21262d' }
-        },
-        y: {
-          ticks: { color: '#8b949e', font: { size: 10 } },
-          grid: { color: '#21262d' }
-        }
+    // 카드 + 캔버스 생성
+    var card = document.createElement('div');
+    card.className = 'params-mini-card';
+    var titleEl = document.createElement('div');
+    titleEl.className = 'params-mini-title';
+    titleEl.textContent = param;
+    var wrap = document.createElement('div');
+    wrap.className = 'params-mini-chart';
+    var canvas = document.createElement('canvas');
+    wrap.appendChild(canvas);
+    card.appendChild(titleEl);
+    card.appendChild(wrap);
+    grid.appendChild(card);
+
+    var chart = new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: labels,
+        datasets: [{
+          data: data,
+          borderColor: '#30363d',
+          borderWidth: 1.5,
+          pointBackgroundColor: pointColors,
+          pointBorderColor: pointColors,
+          pointRadius: pointRadii,
+          pointHoverRadius: hoverRadii,
+          stepped: 'before',
+          tension: 0,
+          fill: false,
+          spanGaps: false,
+        }]
       },
-      plugins: {
-        legend: { labels: { color: '#8b949e', boxWidth: 10, font: { size: 10 }, padding: 10 } },
-        tooltip: {
-          callbacks: {
-            label: function(ctx) {
-              return ctx.dataset.label + ': ' + (ctx.parsed.y !== null ? ctx.parsed.y : '-');
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        scales: {
+          x: {
+            ticks: { color: '#8b949e', font: { size: 8 }, maxRotation: 35, maxTicksLimit: 5 },
+            grid: { color: '#21262d' }
+          },
+          y: {
+            ticks: { color: '#8b949e', font: { size: 8 } },
+            grid: { color: '#21262d' }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            filter: function(item) { return pointRadii[item.dataIndex] > 0; },
+            callbacks: {
+              title: function(items) { return labels[items[0].dataIndex]; },
+              label: function(ctx) {
+                var e = entries[ctx.dataIndex];
+                var wr = e && e.win_rate;
+                var suffix = wr != null ? ' (승률 ' + (wr * 100).toFixed(0) + '%)' : '';
+                return param + ': ' + ctx.parsed.y + suffix;
+              }
             }
           }
         }
       }
-    }
+    });
+    improverMiniCharts.push(chart);
   });
 }
 

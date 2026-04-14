@@ -125,6 +125,8 @@ class ImproverAgent(BaseAgent):
                     "ticker_advice": self._ticker_advice,
                     "reasoning": result.get("reasoning", ""),
                     "source": "llm",
+                    "win_rate": self._last_report.get("win_rate") if self._last_report else None,
+                    "total_pnl": self._last_report.get("total_pnl") if self._last_report else None,
                 })
             except Exception as exc:
                 self.log(f"improver error: {exc}")
