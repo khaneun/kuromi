@@ -70,14 +70,4 @@ class NotifierAgent(BaseAgent):
             )
             return f"🤖 <b>Improver 파라미터 업데이트</b> ({len(p)}건)\n{lines}"
 
-        if topic == "performance.report":
-            win = p.get("win_rate", 0) if isinstance(p, dict) else 0
-            pnl = p.get("total_pnl", 0) if isinstance(p, dict) else 0
-            trades = p.get("total_trades", 0) if isinstance(p, dict) else 0
-            return (
-                f"📊 <b>성과 리포트</b>\n"
-                f"  거래: <code>{trades}</code>건  승률: <code>{win:.1%}</code>\n"
-                f"  PnL: <code>{pnl:+,.0f} KRW</code>"
-            )
-
         return None

@@ -764,6 +764,17 @@ function fmtUptime(sec) {
   if (h > 0) return h + '시간 ' + m + '분';
   return m + '분';
 }
+function fmtKST(isoStr) {
+  if (!isoStr) return '';
+  var d = new Date(isoStr.endsWith('Z') || isoStr.includes('+') ? isoStr : isoStr + 'Z');
+  if (isNaN(d.getTime())) return isoStr.slice(5, 16);
+  return d.toLocaleString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false
+  });
+}
 function escHtml(s) {
   if (!s) return '';
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -919,7 +930,7 @@ function renderOrders(orders) {
     var stateLabel = STATE_KO[o.state] || o.state;
     var stateClass = o.state === 'failed' ? 'neg' : o.state === 'filled' ? 'pos' : '';
     return '<tr>' +
-      '<td>' + (o.created_at || '').slice(5, 16) + '</td>' +
+      '<td>' + fmtKST(o.created_at) + '</td>' +
       '<td class="' + sideClass + '">' + side + '</td>' +
       '<td>' + escHtml(o.ticker) + '</td>' +
       '<td>' + fmt(o.price) + '</td>' +
@@ -937,7 +948,7 @@ function renderTrades(trades) {
     var side = t.side === 'buy' ? '매수' : '매도';
     var sideClass = t.side === 'buy' ? 'pos' : 'neg';  /* 매수=빨강, 매도=파랑 */
     return '<tr>' +
-      '<td>' + (t.ts || '').slice(5, 16) + '</td>' +
+      '<td>' + fmtKST(t.ts) + '</td>' +
       '<td class="' + sideClass + '">' + side + '</td>' +
       '<td>' + escHtml(t.ticker) + '</td>' +
       '<td>' + fmt(t.price) + '</td>' +
@@ -1004,7 +1015,7 @@ function initChart() {
 function renderEquity(eq) {
   if (!eq || !eq.length || !eqChart) return;
   eqChart.data.labels = eq.map(function(p) {
-    return new Date(p.ts * 1000).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+    return new Date(p.ts * 1000).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' });
   });
   eqChart.data.datasets[0].data = eq.map(function(p) { return p.equity; });
   eqChart.data.datasets[1].data = eq.map(function(p) { return p.unrealized_pnl; });
@@ -1080,7 +1091,7 @@ function renderImproverLog(logs) {
     var sourceLabel = entry.source === 'seed' ? 'SEED' : 'LLM';
     var keys = Array.isArray(entry.updated_keys) ? entry.updated_keys.join(', ') : (entry.updated_keys || '-');
     return '<div class="improver-entry">' +
-      '<div class="improver-ts">' + escHtml(entry.timestamp || '') +
+      '<div class="improver-ts">' + fmtKST(entry.timestamp) +
         '<span class="improver-source ' + sourceClass + '">' + sourceLabel + '</span>' +
       '</div>' +
       '<div class="improver-keys">변경: ' + escHtml(keys) + '</div>' +
