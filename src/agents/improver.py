@@ -4,10 +4,14 @@ import json
 import time
 from collections import deque
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from src.agents.base import BaseAgent
 from src.core.event_bus import EventBus
 from src.core.state import SharedState
+
+if TYPE_CHECKING:
+    from src.exchange.upbit_client import UpbitClient
 
 
 class ImproverAgent(BaseAgent):
@@ -20,16 +24,20 @@ class ImproverAgent(BaseAgent):
     name = "improver"
 
     SYSTEM_PROMPT = (
-        "You are a quantitative trading meta-optimizer. Given a performance report, "
-        "current strategy parameters, and active trading positions, propose improvements. "
+        "You are a quantitative trading meta-optimizer for a Korean crypto trading bot on Upbit. "
+        "You receive: (1) a performance report, (2) current strategy parameters, "
+        "(3) active tickers with realized PnL, and (4) a real-time market scan of the top 40 KRW markets "
+        "ranked by 24h trade volume with their 24h price change.\n\n"
         "Respond with a single JSON object with exactly three keys:\n"
         "1) 'params': object mapping parameter names to new numeric values (only include changes).\n"
-        "2) 'ticker_advice': object with 'add' (list of Upbit KRW-XXX codes to consider adding) "
-        "and 'remove' (list of currently active tickers to consider removing). "
-        "Base removal on poor realized PnL or weak signals. Base additions on momentum/volume leaders. "
-        "Be conservative — only recommend when evidence is clear. Empty lists are fine.\n"
-        "3) 'reasoning': concise Korean string (2-4 sentences) explaining WHY each parameter was changed "
-        "based on the performance data. Be specific about which metrics drove each decision."
+        "2) 'ticker_advice': object with:\n"
+        "   - 'add': list of KRW-XXX codes from the market_scan to consider adding. "
+        "Pick tickers with strong positive momentum (high change_24h_pct AND high volume rank) "
+        "that are NOT already in active_tickers. Recommend 1-3 max. Empty list is fine.\n"
+        "   - 'remove': list of active tickers to consider removing. "
+        "Base on consistently negative realized PnL AND low/declining market volume rank.\n"
+        "3) 'reasoning': concise Korean string (2-4 sentences) explaining WHY each parameter and ticker "
+        "change was recommended, citing specific metrics from the report and market scan."
     )
 
     def __init__(
@@ -40,12 +48,14 @@ class ImproverAgent(BaseAgent):
         cadence_sec: int = 3600,
         model: str = "claude-sonnet-4-6",
         seed_file: str | None = None,
+        upbit: "UpbitClient | None" = None,
     ) -> None:
         super().__init__(bus, state)
         self.api_key = api_key
         self.cadence_sec = cadence_sec
         self.model = model
         self.seed_file = seed_file
+        self.upbit = upbit
         self._last_report: dict | None = None
         self._feedback_log: deque[dict] = deque(maxlen=100)
         self._ticker_advice: dict = {"add": [], "remove": []}  # B: 최신 티커 편입/편출 추천
@@ -86,7 +96,8 @@ class ImproverAgent(BaseAgent):
             if not self._last_report or not self.api_key:
                 continue
             try:
-                result = await self._ask_llm(self._last_report, self.state.strategy_params)
+                market_scan = await self._scan_market()
+                result = await self._ask_llm(self._last_report, self.state.strategy_params, market_scan)
                 updates = result.get("params", {})
                 advice = result.get("ticker_advice", {})
                 if isinstance(advice, dict):
@@ -118,6 +129,16 @@ class ImproverAgent(BaseAgent):
             except Exception as exc:
                 self.log(f"improver error: {exc}")
 
+    async def _scan_market(self) -> list[dict]:
+        """Upbit KRW 마켓 상위 40개 스냅샷. 실패 시 빈 리스트 반환."""
+        if not self.upbit:
+            return []
+        try:
+            return await self.upbit.get_top_krw_markets(top_n=40)
+        except Exception as exc:
+            self.log(f"market scan error: {exc}")
+            return []
+
     def _load_log(self) -> None:
         p = Path(self._log_path)
         if not p.exists():
@@ -144,18 +165,22 @@ class ImproverAgent(BaseAgent):
         """B: 최신 LLM 티커 편입/편출 추천 (ts: Unix timestamp of last update)."""
         return {**self._ticker_advice, "ts": self._last_advice_ts}
 
-    async def _ask_llm(self, report: dict, params: dict) -> dict:
+    async def _ask_llm(self, report: dict, params: dict, market_scan: list[dict]) -> dict:
         from anthropic import AsyncAnthropic
 
         client = AsyncAnthropic(api_key=self.api_key)
         msg = await client.messages.create(
             model=self.model,
-            max_tokens=768,
+            max_tokens=1024,
             system=self.SYSTEM_PROMPT,
             messages=[
                 {
                     "role": "user",
-                    "content": json.dumps({"report": report, "params": params}),
+                    "content": json.dumps({
+                        "report": report,
+                        "params": params,
+                        "market_scan": market_scan,
+                    }),
                 }
             ],
         )

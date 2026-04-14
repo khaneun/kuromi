@@ -33,6 +33,26 @@ class UpbitClient:
         resp.raise_for_status()
         return {row["market"]: float(row["trade_price"]) for row in resp.json()}
 
+    async def get_top_krw_markets(self, top_n: int = 40) -> list[dict]:
+        """24h 거래대금 기준 상위 KRW 마켓 스냅샷 반환."""
+        markets_resp = await self._client.get("/v1/market/all", params={"isDetails": "false"})
+        markets_resp.raise_for_status()
+        krw = [m["market"] for m in markets_resp.json() if m["market"].startswith("KRW-")]
+
+        ticker_resp = await self._client.get("/v1/ticker", params={"markets": ",".join(krw)})
+        ticker_resp.raise_for_status()
+        rows = ticker_resp.json()
+        rows.sort(key=lambda x: x.get("acc_trade_price_24h", 0), reverse=True)
+        return [
+            {
+                "ticker": r["market"],
+                "price": r["trade_price"],
+                "change_24h_pct": round(float(r.get("signed_change_rate", 0)) * 100, 2),
+                "volume_24h_krw_bil": round(float(r.get("acc_trade_price_24h", 0)) / 1e8, 1),
+            }
+            for r in rows[:top_n]
+        ]
+
     async def get_candles(self, ticker: str, unit: int = 1, count: int = 200) -> list[dict]:
         resp = await self._client.get(
             f"/v1/candles/minutes/{unit}", params={"market": ticker, "count": count}

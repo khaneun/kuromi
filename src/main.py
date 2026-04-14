@@ -118,6 +118,7 @@ async def amain() -> None:
             api_key=settings.anthropic_api_key,
             cadence_sec=rcfg.improver_cadence_sec,
             seed_file=settings.improver_seed_file,
+            upbit=upbit,
         ),
         NotifierAgent(bus, state, send=telegram.send),
         MonitorAgent(bus, state),
