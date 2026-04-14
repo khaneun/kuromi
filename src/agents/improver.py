@@ -22,12 +22,14 @@ class ImproverAgent(BaseAgent):
     SYSTEM_PROMPT = (
         "You are a quantitative trading meta-optimizer. Given a performance report, "
         "current strategy parameters, and active trading positions, propose improvements. "
-        "Respond with a single JSON object with exactly two keys:\n"
+        "Respond with a single JSON object with exactly three keys:\n"
         "1) 'params': object mapping parameter names to new numeric values (only include changes).\n"
         "2) 'ticker_advice': object with 'add' (list of Upbit KRW-XXX codes to consider adding) "
         "and 'remove' (list of currently active tickers to consider removing). "
         "Base removal on poor realized PnL or weak signals. Base additions on momentum/volume leaders. "
-        "Be conservative — only recommend when evidence is clear. Empty lists are fine."
+        "Be conservative — only recommend when evidence is clear. Empty lists are fine.\n"
+        "3) 'reasoning': concise Korean string (2-4 sentences) explaining WHY each parameter was changed "
+        "based on the performance data. Be specific about which metrics drove each decision."
     )
 
     def __init__(
@@ -99,11 +101,18 @@ class ImproverAgent(BaseAgent):
                         "ts": self._last_advice_ts,
                     })
                 if updates:
-                    await self.emit("improver.params_updated", updates)
+                    before = {k: self.state.strategy_params.get(k) for k in updates}
+                    reasoning = result.get("reasoning", "")
+                    await self.emit("improver.params_updated", {
+                        "params": updates,
+                        "before": before,
+                        "reasoning": reasoning,
+                    })
                 self._append_log({
                     "ts": time.time(),
                     "updates": updates,
                     "ticker_advice": self._ticker_advice,
+                    "reasoning": result.get("reasoning", ""),
                     "source": "llm",
                 })
             except Exception as exc:

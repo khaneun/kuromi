@@ -115,7 +115,12 @@ class StrategyAgent(BaseAgent):
         )
 
     async def _on_params(self, event: Event) -> None:
-        updates = event.payload or {}
+        payload = event.payload or {}
+        if not isinstance(payload, dict):
+            return
+        # 새 포맷: {params: {...}, before: {...}, reasoning: "..."}
+        # 구 포맷(dashboard 직접 발송 등): flat {k: v}
+        updates = payload.get("params", payload) if "params" in payload else payload
         if not isinstance(updates, dict):
             return
         self.state.strategy_params.update(updates)

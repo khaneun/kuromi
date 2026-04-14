@@ -62,12 +62,32 @@ class NotifierAgent(BaseAgent):
             return f"⚠️ <b>시스템 알림</b>\n{msg}"
 
         if topic == "improver.params_updated":
-            if not isinstance(p, dict) or not p:
-                return "🤖 <b>Improver 파라미터 업데이트</b>\n변경 없음"
-            lines = "\n".join(
-                f"  <code>{k}</code>: <code>{v}</code>"
-                for k, v in p.items()
-            )
-            return f"🤖 <b>Improver 파라미터 업데이트</b> ({len(p)}건)\n{lines}"
+            if not isinstance(p, dict):
+                return None
+            # 새 포맷: {params, before, reasoning} / 구 포맷: flat {k:v}
+            updates: dict = p.get("params", p) if "params" in p else p
+            before: dict = p.get("before", {}) if "params" in p else {}
+            reasoning: str = p.get("reasoning", "") if "params" in p else ""
+            if not updates:
+                return None
+            def _fmt_val(v: object) -> str:
+                if v is None:
+                    return "?"
+                try:
+                    f = float(v)  # type: ignore[arg-type]
+                    return f"{f:g}"
+                except (TypeError, ValueError):
+                    return str(v)
+            lines = []
+            for k, new_v in updates.items():
+                old_v = before.get(k)
+                lines.append(
+                    f"  <code>{k}</code>: <code>{_fmt_val(old_v)}</code> → <code>{_fmt_val(new_v)}</code>"
+                )
+            body = "\n".join(lines)
+            text = f"🤖 <b>Improver 파라미터 업데이트</b> ({len(updates)}건)\n{body}"
+            if reasoning:
+                text += f"\n\n<i>{reasoning}</i>"
+            return text
 
         return None
