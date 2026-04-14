@@ -109,6 +109,7 @@ async def amain() -> None:
             bus, state, client=upbit,
             equity_tracker=equity_tracker,
             live=(not rcfg.dry_run),
+            trading_tickers=tickers,
         ),
         PerformanceAgent(bus, state, persistence=persistence),
         ImproverAgent(
