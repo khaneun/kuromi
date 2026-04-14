@@ -62,6 +62,7 @@ def create_app(
         "system.halt", "system.alert", "system.resume",
         "improver.params_updated",
         "improver.ticker_advice",
+        "trade.closed",
         "performance.report",
     }
     _CRITICAL_REJECT = {"system_halted", "daily_loss_limit"}

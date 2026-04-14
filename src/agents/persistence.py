@@ -37,6 +37,7 @@ class PersistenceAgent(BaseAgent):
         self.subscribe("order.filled", self._on_order_terminal)
         self.subscribe("order.cancelled", self._on_order_terminal)
         self.subscribe("order.failed", self._on_order_terminal)
+        self.subscribe("trade.closed", self._on_trade_closed)
         self.subscribe("signal.generated", self._on_signal)
 
     async def run(self) -> None:
@@ -94,7 +95,8 @@ class PersistenceAgent(BaseAgent):
             )
             await session.execute(stmt)
 
-            if p["state"] == "filled":
+            # buy 체결만 여기서 저장 (sell은 pnl이 확정된 trade.closed에서 저장)
+            if p["state"] == "filled" and p.get("side") == "buy":
                 trade = TradeLog(
                     ticker=p["ticker"],
                     side=p["side"],
@@ -104,6 +106,20 @@ class PersistenceAgent(BaseAgent):
                 )
                 session.add(trade)
 
+            await session.commit()
+
+    async def _on_trade_closed(self, event: Event) -> None:
+        """sell 완료 — pnl 확정 후 TradeLog 저장."""
+        p = event.payload
+        async with self._sf() as session:
+            session.add(TradeLog(
+                ticker=p["ticker"],
+                side=p["side"],
+                price=float(p["price"]),
+                volume=float(p.get("executed_volume") or p.get("volume") or 0),
+                pnl=float(p.get("pnl", 0)),
+                payload=p,
+            ))
             await session.commit()
 
     # ---- signals (sampled) ----

@@ -70,10 +70,14 @@ class PortfolioAgent(BaseAgent):
                 self.log(f"open_position failed: {exc}")
                 return
         elif o["side"] == "sell":
-            self.state.capital.close_position(ticker, price)
-            entry = self.state.positions.get(ticker, {}).get("entry_price", price)
-            if entry:
-                self.state.daily_pnl += (price - entry) / entry
+            # close_position이 position을 제거하기 전에 entry_price 저장
+            pos = self.state.capital.positions.get(ticker)
+            entry_price = pos.entry_price if pos else price
+            pnl = self.state.capital.close_position(ticker, price)
+            if entry_price > 0:
+                self.state.daily_pnl += (price - entry_price) / entry_price
+            # pnl 포함 이벤트 emit → PerformanceAgent·PersistenceAgent가 구독
+            await self.emit("trade.closed", {**o, "pnl": pnl, "entry_price": entry_price})
 
     async def _sync_upbit(self) -> None:
         if not self.client:

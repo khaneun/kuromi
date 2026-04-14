@@ -110,7 +110,7 @@ async def amain() -> None:
             equity_tracker=equity_tracker,
             live=(not rcfg.dry_run),
         ),
-        PerformanceAgent(bus, state),
+        PerformanceAgent(bus, state, persistence=persistence),
         ImproverAgent(
             bus,
             state,
