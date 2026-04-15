@@ -12,7 +12,7 @@ class NotifierAgent(BaseAgent):
     name = "notifier"
 
     # trade.rejected는 이 reason 목록만 발송 (routine rejection 제외)
-    CRITICAL_REJECT_REASONS = {"system_halted", "daily_loss_limit"}
+    CRITICAL_REJECT_REASONS = {"system_halted"}
 
     def __init__(self, bus: EventBus, state: SharedState, send) -> None:
         super().__init__(bus, state)
@@ -46,7 +46,7 @@ class NotifierAgent(BaseAgent):
             if reason not in self.CRITICAL_REJECT_REASONS:
                 return None
             ticker = p.get("ticker", "?") if isinstance(p, dict) else "?"
-            icons = {"system_halted": "🛑", "daily_loss_limit": "⛔"}
+            icons = {"system_halted": "🛑"}
             icon = icons.get(reason, "⚠️")
             return f"{icon} <b>거래 거절</b> [{ticker}]\n사유: {reason}"
 

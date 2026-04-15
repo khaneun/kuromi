@@ -17,7 +17,6 @@ class RiskAgent(BaseAgent):
         state: SharedState,
         max_positions: int,
         per_trade_risk_pct: float,
-        daily_loss_limit_pct: float,
         min_order_krw: float = 5000.0,
         min_profit_pct: float = 0.005,
         stop_loss_pct: float = 0.02,
@@ -25,7 +24,6 @@ class RiskAgent(BaseAgent):
         super().__init__(bus, state)
         self.max_positions = max_positions
         self.per_trade_risk_pct = per_trade_risk_pct
-        self.daily_loss_limit_pct = daily_loss_limit_pct
         self.min_order_krw = min_order_krw
         self.min_profit_pct = min_profit_pct
         self.stop_loss_pct = stop_loss_pct
@@ -52,8 +50,6 @@ class RiskAgent(BaseAgent):
     def _reject_reason(self, intent: dict) -> str | None:
         if self.state.halted:
             return "system_halted"
-        if self.state.daily_pnl <= -self.daily_loss_limit_pct:
-            return "daily_loss_limit"
         if (
             intent["side"] == "buy"
             and len(self.state.capital.positions) >= self.max_positions

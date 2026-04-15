@@ -49,7 +49,6 @@ class Settings(BaseSettings):
             ],
             "max_concurrent_positions": int(os.getenv("MAX_CONCURRENT_POSITIONS", "3")),
             "per_trade_risk_pct": float(os.getenv("PER_TRADE_RISK_PCT", "0.01")),
-            "daily_loss_limit_pct": float(os.getenv("DAILY_LOSS_LIMIT_PCT", "0.03")),
             "improver_cadence_sec": int(os.getenv("IMPROVER_CADENCE_SEC", "3600")),
             "usdkrw_rate": float(os.getenv("USDKRW_RATE", "1380")),
             "log_level": os.getenv("LOG_LEVEL", "INFO"),

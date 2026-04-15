@@ -200,6 +200,7 @@ class PersistenceAgent(BaseAgent):
                     "price": r.price,
                     "volume": r.volume,
                     "pnl": r.pnl,
+                    "entry_price": (r.payload or {}).get("entry_price"),
                 }
                 for r in result.scalars().all()
             ]

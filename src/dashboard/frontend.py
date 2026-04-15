@@ -542,12 +542,12 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
       <div class="kpi-sub" id="kpi-locked" style="font-size:0.72rem;color:#94a3b8;margin-top:2px"></div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">미실현 손익</div>
-      <div class="kpi-value" id="kpi-unrealized">-</div>
+      <div class="kpi-label">누적 수익률</div>
+      <div class="kpi-value" id="kpi-return">-</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">수익률</div>
-      <div class="kpi-value" id="kpi-return">-</div>
+      <div class="kpi-label">승률 (익절/매도)</div>
+      <div class="kpi-value" id="kpi-winrate">-</div>
     </div>
     <div class="system-badge" id="system-badges"></div>
   </div>
@@ -562,27 +562,21 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
       </table>
     </div>
 
-    <!-- Equity Curve -->
+    <!-- Win Rate Chart -->
     <div class="card">
-      <div class="card-title">자산 곡선</div>
-      <div class="chart-container"><canvas id="equity-chart"></canvas></div>
+      <div class="card-title">승률 관리</div>
+      <div class="chart-container"><canvas id="winrate-chart"></canvas></div>
     </div>
 
-    <!-- Recent Orders -->
-    <div class="card">
-      <div class="card-title">최근 주문 (10건)</div>
+    <!-- Trade History -->
+    <div class="card dash-full">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+        <span>매매내역</span>
+        <div id="trade-pagination" style="display:flex;gap:8px;align-items:center;font-size:0.78rem"></div>
+      </div>
       <table>
-        <thead><tr><th>시간</th><th>방향</th><th>티커</th><th>가격</th><th>상태</th></tr></thead>
-        <tbody id="orders-body"></tbody>
-      </table>
-    </div>
-
-    <!-- Recent Trades -->
-    <div class="card">
-      <div class="card-title">최근 체결 (10건)</div>
-      <table>
-        <thead><tr><th>시간</th><th>방향</th><th>티커</th><th>가격</th><th>수량</th></tr></thead>
-        <tbody id="trades-body"></tbody>
+        <thead><tr><th>방향</th><th>티커</th><th>수익률</th></tr></thead>
+        <tbody id="trade-history-body"></tbody>
       </table>
     </div>
 
@@ -673,15 +667,6 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
           <input type="range" id="cfg-risk-per-trade" min="1" max="20" step="1" value="1">
           <div class="slider-range-hint"><span>1%</span><span>20%</span></div>
           <div class="slider-note">한 번의 매매에 투입하는 총 자본 대비 비율</div>
-        </div>
-        <div class="slider-group">
-          <div class="slider-header">
-            <span class="slider-label">일일 손실 한도</span>
-            <span class="slider-val" id="risk-daily-loss-val">3%</span>
-          </div>
-          <input type="range" id="cfg-risk-daily-loss" min="1" max="20" step="1" value="3">
-          <div class="slider-range-hint"><span>1%</span><span>20%</span></div>
-          <div class="slider-note">초과 시 매매 자동 중단</div>
         </div>
         <div class="slider-group">
           <div class="slider-header">
@@ -896,28 +881,27 @@ function startPolling(tab) {
 /* ========== Tab 1: Dashboard ========== */
 async function refreshDashboard() {
   try {
-    var [st, orders, trades, eq] = await Promise.all([
+    var [st, trades, cfg] = await Promise.all([
       api('/api/state'),
-      api('/api/orders?limit=10'),
-      api('/api/trades?limit=10'),
-      api('/api/equity?last=500')
+      api('/api/trades?limit=200'),
+      api('/api/config')
     ]);
     // A·C: 전역 캐시 업데이트 (설정 탭 종목 추천용)
     if (st.last_signals) lastSignals = st.last_signals;
     if (st.capital) lastCapital = st.capital;
     if (st.last_prices) lastPrices = st.last_prices;
-    renderKPI(st);
+    currentConfig = cfg;
+    renderKPI(st, trades);
     renderBadges(st);
     renderPositions(st.capital ? st.capital.positions || {} : {});
-    renderOrders(orders);
-    renderTrades(trades);
-    renderEquity(eq);
+    renderTradeHistory(trades);
+    renderWinRateChart(trades, cfg);
   } catch (e) {
     console.error('Dashboard refresh error:', e);
   }
 }
 
-function renderKPI(st) {
+function renderKPI(st, trades) {
   var c = st.capital || {};
   $('kpi-equity').textContent = fmt(c.total_equity) + ' KRW';
   $('kpi-available').textContent = fmt(c.available_krw) + ' KRW';
@@ -928,13 +912,24 @@ function renderKPI(st) {
     lockedEl.textContent = locked > 0 ? ('주문 중 ' + fmt(locked) + ' KRW') : '';
   }
 
-  var upnl = c.unrealized_pnl || 0;
-  $('kpi-unrealized').textContent = fmt(upnl) + ' KRW';
-  $('kpi-unrealized').className = 'kpi-value ' + cls(upnl);
-
   var ret = c.total_return_pct;
   $('kpi-return').textContent = pct(ret);
   $('kpi-return').className = 'kpi-value ' + cls(ret || 0);
+
+  // 승률: 매도 체결 중 수익 확정 건수
+  var sells = (trades || []).filter(function(t) { return t.side === 'sell'; });
+  var wins = sells.filter(function(t) { return (t.pnl || 0) > 0; }).length;
+  var wrEl = $('kpi-winrate');
+  if (wrEl) {
+    if (sells.length === 0) {
+      wrEl.textContent = '-';
+      wrEl.className = 'kpi-value neutral';
+    } else {
+      var wr = wins / sells.length;
+      wrEl.textContent = (wr * 100).toFixed(1) + '% (' + wins + '/' + sells.length + ')';
+      wrEl.className = 'kpi-value ' + (wr >= 0.5 ? 'pos' : 'neg');
+    }
+  }
 }
 
 function renderBadges(st) {
@@ -969,76 +964,109 @@ function renderPositions(positions) {
   }).join('');
 }
 
-function renderOrders(orders) {
-  if (!orders || orders.length === 0) {
-    $('orders-body').innerHTML = '<tr><td colspan="5" class="empty-msg">최근 주문이 없습니다.</td></tr>';
-    return;
-  }
-  var STATE_KO = {
-    'submitted': '제출됨', 'accepted': '접수됨', 'partially_filled': '부분체결',
-    'filled': '체결완료', 'cancelled': '취소됨', 'failed': '실패'
-  };
-  $('orders-body').innerHTML = orders.map(function(o) {
-    var side = o.side === 'buy' ? '매수' : '매도';
-    var sideClass = o.side === 'buy' ? 'pos' : 'neg';
-    var stateLabel = STATE_KO[o.state] || o.state;
-    var stateClass = o.state === 'failed' ? 'neg' : o.state === 'filled' ? 'pos' : '';
-    return '<tr>' +
-      '<td>' + fmtKST(o.created_at) + '</td>' +
-      '<td class="' + sideClass + '">' + side + '</td>' +
-      '<td>' + escHtml(o.ticker) + '</td>' +
-      '<td>' + fmt(o.price) + '</td>' +
-      '<td class="' + stateClass + '">' + stateLabel + '</td>' +
-      '</tr>';
-  }).join('');
+var tradeHistoryAll = [];
+var tradeHistoryPage = 0;
+var TRADE_PAGE_SIZE = 10;
+
+function renderTradeHistory(trades) {
+  tradeHistoryAll = trades || [];
+  tradeHistoryPage = 0;
+  renderTradeHistoryPage();
 }
 
-function renderTrades(trades) {
-  if (!trades || trades.length === 0) {
-    $('trades-body').innerHTML = '<tr><td colspan="5" class="empty-msg">최근 체결이 없습니다.</td></tr>';
-    return;
+function renderTradeHistoryPage() {
+  var total = tradeHistoryAll.length;
+  var start = tradeHistoryPage * TRADE_PAGE_SIZE;
+  var end = Math.min(start + TRADE_PAGE_SIZE, total);
+  var page = tradeHistoryAll.slice(start, end);
+
+  var bodyEl = $('trade-history-body');
+  if (!bodyEl) return;
+
+  if (total === 0) {
+    bodyEl.innerHTML = '<tr><td colspan="3" class="empty-msg">매매 내역이 없습니다.</td></tr>';
+  } else {
+    bodyEl.innerHTML = page.map(function(t) {
+      var side = t.side === 'buy' ? '매수' : '매도';
+      var sideClass = t.side === 'buy' ? 'pos' : 'neg';
+      var pnlStr = '';
+      var pnlClass = 'neutral';
+      if (t.side === 'sell' && t.pnl != null) {
+        var cost = (t.entry_price && t.volume) ? (t.entry_price * t.volume) : 0;
+        if (cost > 0) {
+          var pp = t.pnl / cost;
+          pnlStr = (pp >= 0 ? '+' : '') + (pp * 100).toFixed(2) + '%';
+          pnlClass = pp > 0 ? 'pos' : pp < 0 ? 'neg' : 'neutral';
+        } else {
+          pnlStr = t.pnl >= 0 ? '+' + fmt(t.pnl) : fmt(t.pnl);
+          pnlClass = t.pnl > 0 ? 'pos' : t.pnl < 0 ? 'neg' : 'neutral';
+        }
+      }
+      return '<tr>' +
+        '<td class="' + sideClass + '">' + side + '</td>' +
+        '<td>' + escHtml(t.ticker) + '</td>' +
+        '<td class="' + pnlClass + '">' + pnlStr + '</td>' +
+        '</tr>';
+    }).join('');
   }
-  $('trades-body').innerHTML = trades.map(function(t) {
-    var side = t.side === 'buy' ? '매수' : '매도';
-    var sideClass = t.side === 'buy' ? 'pos' : 'neg';  /* 매수=빨강, 매도=파랑 */
-    return '<tr>' +
-      '<td>' + fmtKST(t.ts) + '</td>' +
-      '<td class="' + sideClass + '">' + side + '</td>' +
-      '<td>' + escHtml(t.ticker) + '</td>' +
-      '<td>' + fmt(t.price) + '</td>' +
-      '<td>' + fmtDec(t.volume, 6) + '</td>' +
-      '</tr>';
-  }).join('');
+
+  // 페이지 네이션
+  var paginEl = $('trade-pagination');
+  if (paginEl) {
+    var totalPages = Math.ceil(total / TRADE_PAGE_SIZE);
+    if (totalPages <= 1) {
+      paginEl.innerHTML = total > 0 ? '<span style="color:var(--muted)">총 ' + total + '건</span>' : '';
+    } else {
+      paginEl.innerHTML =
+        '<span style="color:var(--muted)">' + (start + 1) + '-' + end + ' / ' + total + '건</span>' +
+        '<button class="btn" onclick="tradePage(-1)"' + (tradeHistoryPage === 0 ? ' disabled' : '') + '>◀</button>' +
+        '<button class="btn" onclick="tradePage(1)"' + (end >= total ? ' disabled' : '') + '>▶</button>';
+    }
+  }
 }
 
-/* ===== Equity Chart ===== */
-var eqChart = null;
+function tradePage(dir) {
+  var totalPages = Math.ceil(tradeHistoryAll.length / TRADE_PAGE_SIZE);
+  tradeHistoryPage = Math.max(0, Math.min(tradeHistoryPage + dir, totalPages - 1));
+  renderTradeHistoryPage();
+}
+
+/* ===== Win Rate Chart ===== */
+var winRateChart = null;
 var improverLogsCache = [];
 var improverMiniCharts = [];
+
 function initChart() {
-  var ctx = $('equity-chart').getContext('2d');
-  eqChart = new Chart(ctx, {
+  var canvas = $('winrate-chart');
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  winRateChart = new Chart(ctx, {
     type: 'line',
     data: {
       labels: [],
-      datasets: [{
-        label: '총 자산',
-        data: [],
-        borderColor: '#58a6ff',
-        borderWidth: 1.5,
-        fill: false,
-        pointRadius: 0,
-        tension: 0.3
-      }, {
-        label: '미실현 손익',
-        data: [],
-        borderColor: '#d29922',
-        borderWidth: 1,
-        fill: false,
-        pointRadius: 0,
-        tension: 0.3,
-        borderDash: [4, 2]
-      }]
+      datasets: [
+        {
+          label: '실제 승률',
+          data: [],
+          borderColor: '#3fb950',
+          backgroundColor: 'rgba(63,185,80,0.07)',
+          borderWidth: 2,
+          fill: false,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          tension: 0.2
+        },
+        {
+          label: '손익분기 승률',
+          data: [],
+          borderColor: '#d29922',
+          borderWidth: 1.5,
+          fill: false,
+          pointRadius: 0,
+          tension: 0,
+          borderDash: [5, 3]
+        }
+      ]
     },
     options: {
       responsive: true,
@@ -1047,20 +1075,26 @@ function initChart() {
       scales: {
         x: { display: false },
         y: {
+          min: 0,
+          max: 1,
           ticks: {
-            callback: function(v) { return fmt(v); },
+            callback: function(v) { return (v * 100).toFixed(0) + '%'; },
             color: '#8b949e',
-            font: { size: 11 }
+            font: { size: 11 },
+            stepSize: 0.1
           },
-          grid: { color: '#21262d' }
+          grid: { color: 'rgba(139,148,158,0.15)' }
         }
       },
       plugins: {
         legend: {
-          labels: {
-            color: '#8b949e',
-            boxWidth: 12,
-            font: { size: 11 }
+          labels: { color: '#8b949e', boxWidth: 12, font: { size: 11 } }
+        },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              return ctx.dataset.label + ': ' + (ctx.parsed.y * 100).toFixed(1) + '%';
+            }
           }
         }
       }
@@ -1068,14 +1102,38 @@ function initChart() {
   });
 }
 
-function renderEquity(eq) {
-  if (!eq || !eq.length || !eqChart) return;
-  eqChart.data.labels = eq.map(function(p) {
-    return new Date(p.ts * 1000).toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul', hour: '2-digit', minute: '2-digit' });
+function renderWinRateChart(trades, config) {
+  if (!winRateChart) return;
+  // 매도 체결만 시간 오름차순으로 정렬
+  var sells = (trades || []).filter(function(t) { return t.side === 'sell'; }).slice().reverse();
+  if (sells.length === 0) {
+    winRateChart.data.labels = [];
+    winRateChart.data.datasets[0].data = [];
+    winRateChart.data.datasets[1].data = [];
+    winRateChart.update('none');
+    return;
+  }
+
+  var stopLoss = config && config.stop_loss_pct ? config.stop_loss_pct : 0.02;
+  var minProfit = config && config.min_profit_pct ? config.min_profit_pct : 0.005;
+  var breakEven = stopLoss / (stopLoss + minProfit);
+
+  var winCount = 0;
+  var labels = [];
+  var winRates = [];
+  var breakEvens = [];
+
+  sells.forEach(function(t, i) {
+    if ((t.pnl || 0) > 0) winCount++;
+    winRates.push(winCount / (i + 1));
+    breakEvens.push(breakEven);
+    labels.push(fmtKST(t.ts));
   });
-  eqChart.data.datasets[0].data = eq.map(function(p) { return p.equity; });
-  eqChart.data.datasets[1].data = eq.map(function(p) { return p.unrealized_pnl; });
-  eqChart.update('none');
+
+  winRateChart.data.labels = labels;
+  winRateChart.data.datasets[0].data = winRates;
+  winRateChart.data.datasets[1].data = breakEvens;
+  winRateChart.update('none');
 }
 
 /* ========== Tab 2: Agent Management ========== */
@@ -1347,7 +1405,6 @@ function updateLLMDisplay(modelValue) {
 function setupSliders() {
   [
     {id:'cfg-risk-per-trade', valId:'risk-per-trade-val', suffix:'%'},
-    {id:'cfg-risk-daily-loss', valId:'risk-daily-loss-val', suffix:'%'},
     {id:'cfg-max-positions', valId:'max-positions-val', suffix:'개'},
     {id:'cfg-decision-threshold', valId:'decision-threshold-val', suffix:'%'},
     {id:'cfg-min-profit', valId:'min-profit-val', suffix:'', fmt: function(v){ return (v/10).toFixed(1)+'%'; }},
@@ -1395,10 +1452,6 @@ async function loadConfig() {
     var pct1 = Math.round((cfg.per_trade_risk_pct || 0.01) * 100);
     $('cfg-risk-per-trade').value = pct1;
     $('risk-per-trade-val').textContent = pct1 + '%';
-
-    var pct2 = Math.round((cfg.daily_loss_limit_pct || 0.03) * 100);
-    $('cfg-risk-daily-loss').value = pct2;
-    $('risk-daily-loss-val').textContent = pct2 + '%';
 
     var mp = cfg.max_concurrent_positions || 3;
     $('cfg-max-positions').value = mp;
@@ -1570,7 +1623,6 @@ async function saveConfig() {
     llm_model: $('cfg-llm-model').value,
     llm_endpoint: $('cfg-llm-endpoint').value || '',
     per_trade_risk_pct: parseInt($('cfg-risk-per-trade').value) / 100,
-    daily_loss_limit_pct: parseInt($('cfg-risk-daily-loss').value) / 100,
     max_concurrent_positions: parseInt($('cfg-max-positions').value),
     decision_threshold: parseInt($('cfg-decision-threshold').value) / 100,
     min_profit_pct: parseInt($('cfg-min-profit').value) / 1000,
@@ -1680,12 +1732,12 @@ function initApp() {
 
   /* Hash routing */
   var hash = window.location.hash.replace('#', '') || 'dashboard';
-  if (['dashboard', 'agents', 'settings'].indexOf(hash) === -1) hash = 'dashboard';
+  if (['dashboard', 'agents', 'settings', 'system'].indexOf(hash) === -1) hash = 'dashboard';
   navigate(hash);
 
   window.addEventListener('hashchange', function() {
     var h = window.location.hash.replace('#', '') || 'dashboard';
-    if (['dashboard', 'agents', 'settings'].indexOf(h) !== -1 && h !== currentTab) {
+    if (['dashboard', 'agents', 'settings', 'system'].indexOf(h) !== -1 && h !== currentTab) {
       navigate(h);
     }
   });

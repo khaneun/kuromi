@@ -65,7 +65,7 @@ def create_app(
         "trade.closed",
         "performance.report",
     }
-    _CRITICAL_REJECT = {"system_halted", "daily_loss_limit"}
+    _CRITICAL_REJECT = {"system_halted"}
 
     _uvicorn_loop: asyncio.AbstractEventLoop | None = None
 

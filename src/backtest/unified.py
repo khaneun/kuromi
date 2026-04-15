@@ -51,7 +51,6 @@ class UnifiedBacktester:
             self.state,
             max_positions=max_positions,
             per_trade_risk_pct=per_trade_risk_pct,
-            daily_loss_limit_pct=1.0,
             min_order_krw=0.0,
         )
         self.executor = MockExecutionAgent(self.bus, self.state, slippage_bps=slippage_bps)

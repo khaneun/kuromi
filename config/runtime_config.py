@@ -31,7 +31,6 @@ class RuntimeConfig(BaseModel):
     trading_tickers: list[str] = ["KRW-BTC", "KRW-ETH"]
     max_concurrent_positions: int = 3
     per_trade_risk_pct: float = 0.01
-    daily_loss_limit_pct: float = 0.03
     min_profit_pct: float = 0.005
     stop_loss_pct: float = 0.02
     improver_cadence_sec: int = 10800
@@ -93,14 +92,12 @@ class RuntimeConfig(BaseModel):
                 risk_agent.max_positions = self.max_concurrent_positions
             if hasattr(risk_agent, "per_trade_risk_pct"):
                 risk_agent.per_trade_risk_pct = self.per_trade_risk_pct
-            if hasattr(risk_agent, "daily_loss_limit_pct"):
-                risk_agent.daily_loss_limit_pct = self.daily_loss_limit_pct
             if hasattr(risk_agent, "min_profit_pct"):
                 risk_agent.min_profit_pct = self.min_profit_pct
             if hasattr(risk_agent, "stop_loss_pct"):
                 risk_agent.stop_loss_pct = self.stop_loss_pct
             applied.extend(
-                ["max_concurrent_positions", "per_trade_risk_pct", "daily_loss_limit_pct",
+                ["max_concurrent_positions", "per_trade_risk_pct",
                  "min_profit_pct", "stop_loss_pct"]
             )
 
