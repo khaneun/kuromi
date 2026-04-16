@@ -116,10 +116,20 @@ class ExecutionAgent(BaseAgent):
         # → 지정가 주문이 시장에서 즉시 체결되도록 유도 (타임아웃 방지)
         raw_price = self.state.last_prices.get(ticker) or float(intent["price"])
         if side == "buy":
-            order_price = _tick_round(raw_price * (1 + self._SLIPPAGE))
-            # 현재가 기준으로 매수 물량 재계산 (alloc_krw 고정)
             alloc_krw = float(intent.get("alloc_krw") or 0)
+            order_price = _tick_round(raw_price * (1 + self._SLIPPAGE))
             volume = alloc_krw / order_price if order_price > 0 else 0.0
+
+            # ── 잔고 사전 확인 ─────────────────────────────────────────────
+            # 부족하면 Upbit API도 호출하지 않고 조용히 스킵
+            # (order.submitted 이벤트 없이 종료 → DB에 잔재 없음)
+            available = self.state.capital.available_krw
+            if alloc_krw > available:
+                self.log(
+                    f"[{ticker}] 매수 스킵: 주문 가능 현금 부족 "
+                    f"(필요 {alloc_krw:,.0f} / 가용 {available:,.0f} KRW)"
+                )
+                return
         else:
             order_price = _tick_round(raw_price * (1 - self._SLIPPAGE))
             volume = float(intent.get("volume") or 0)
@@ -164,7 +174,12 @@ class ExecutionAgent(BaseAgent):
             body = exc.response.text[:300] if exc.response else ""
             reason = f"HTTP {exc.response.status_code}: {body}"
             order.reason = reason
-            perm_errors = ("insufficient", "minimum", "below_min", "잔고", "금액", "400")
+            # 잔고 부족은 정상 케이스 — FAILED 이벤트 없이 조용히 종료
+            _insufficient = ("insufficient", "insufficient_funds", "잔고", "부족")
+            if any(kw in body.lower() for kw in _insufficient):
+                self.log(f"[{ticker}] 매수 스킵: 잔고 부족 (Upbit 거절) {body[:80]}")
+                return
+            perm_errors = ("minimum", "below_min", "금액", "400")
             if order.retry_count < 1 and not any(e in reason.lower() for e in perm_errors):
                 order.retry_count += 1
                 self.log(f"order failed ({reason}), retrying #{order.retry_count} for {ticker}")
@@ -242,16 +257,23 @@ class ExecutionAgent(BaseAgent):
         if order.state in TERMINAL:
             self._active.pop(order.uuid, None)
 
+    @staticmethod
+    def _cancel_reason(side: str, forced: bool = False) -> str:
+        """타임아웃 취소 reason 생성. 매도는 정보성 문구, 매수는 오류성 문구."""
+        if side == "sell":
+            return "시간경과_강제철회" if forced else "시간경과_철회"
+        return "timeout_force" if forced else "timeout"
+
     async def _try_cancel(self, order: Order) -> OrderState:
         """타임아웃 주문 취소. 최대 3회 시도, 이후 강제 CANCELLED."""
         order.cancel_attempts += 1
         if order.cancel_attempts > 3:
             self.log(f"force-cancel {order.uuid} (시도 {order.cancel_attempts - 1}회 실패)")
-            order.reason = "timeout_force"
+            order.reason = self._cancel_reason(order.side, forced=True)
             return OrderState.CANCELLED
         try:
             await self.client.cancel_order(order.uuid)
-            order.reason = "timeout"
+            order.reason = self._cancel_reason(order.side)
             return OrderState.CANCELLED
         except httpx.HTTPStatusError as exc:
             # 400: 이미 체결·취소된 주문 → 실제 상태 재조회
@@ -273,7 +295,7 @@ class ExecutionAgent(BaseAgent):
                 order.remaining_volume = float(recheck.get("remaining_volume") or 0.0)
                 return OrderState.FILLED
             if actual == "cancel":
-                order.reason = "timeout"
+                order.reason = self._cancel_reason(order.side)
                 return OrderState.CANCELLED
         except Exception as exc:
             self.log(f"재조회 실패 {order.uuid}: {exc}")
