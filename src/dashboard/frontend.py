@@ -20,11 +20,14 @@ INDEX_HTML = """
   --muted: #8b949e;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
+html { overflow-x: hidden; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
   min-width: 320px;
+  max-width: 100vw;
+  overflow-x: hidden;
   line-height: 1.5;
 }
 
@@ -90,7 +93,7 @@ body {
 #clock { color: var(--muted); }
 
 /* ===== Page containers ===== */
-.page { display: none; padding: 24px; max-width: 1400px; margin: 0 auto; }
+.page { display: none; padding: 20px; max-width: 1400px; margin: 0 auto; }
 .page.active { display: block; }
 
 /* ===== Cards ===== */
@@ -112,35 +115,44 @@ body {
 
 /* ===== KPI Cards ===== */
 .kpi-row {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-  margin-bottom: 20px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
   position: relative;
+}
+@media (min-width: 640px) {
+  .kpi-row { grid-template-columns: repeat(4, 1fr); gap: 12px; }
 }
 .kpi-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 16px 20px;
-  flex: 1;
-  min-width: 180px;
+  padding: 14px 16px;
+  min-width: 0;
 }
 .kpi-label {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--muted);
   margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .kpi-value {
-  font-size: 1.3rem;
+  font-size: 1.15rem;
   font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .system-badge {
   position: absolute;
-  top: 0;
+  top: -4px;
   right: 0;
   display: flex;
   gap: 8px;
+  z-index: 1;
 }
 .badge {
   font-size: 0.7rem;
@@ -155,6 +167,7 @@ body {
 .badge-blue { background: var(--accent); color: #000; }
 
 /* ===== Tables ===== */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
 th {
   text-align: left;
@@ -163,10 +176,15 @@ th {
   padding: 8px;
   border-bottom: 1px solid var(--border);
   font-size: 0.75rem;
+  white-space: nowrap;
 }
 td {
   padding: 8px;
   border-bottom: 1px solid var(--border);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 tr:hover td { background: rgba(88,166,255,0.04); }
 /* 한국 증권 컨벤션: 상승/매수/이익=빨강, 하락/매도/손실=파랑, 보합=회색 */
@@ -177,13 +195,13 @@ tr:hover td { background: rgba(88,166,255,0.04); }
 /* ===== Dashboard grid ===== */
 .dash-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-  margin-bottom: 20px;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 .dash-full { grid-column: 1 / -1; }
-@media (max-width: 768px) {
-  .dash-grid { grid-template-columns: 1fr; }
+@media (min-width: 700px) {
+  .dash-grid { grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
 }
 
 /* ===== Chart ===== */
@@ -210,9 +228,12 @@ tr:hover td { background: rgba(88,166,255,0.04); }
 /* ===== Agent Grid ===== */
 .agent-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+@media (min-width: 640px) {
+  .agent-grid { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
 }
 .agent-card {
   background: var(--surface);
@@ -345,12 +366,21 @@ tr:hover td { background: rgba(88,166,255,0.04); }
 /* ===== Settings ===== */
 .settings-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  grid-template-columns: 1fr;
+  gap: 12px;
 }
 .settings-full { grid-column: 1 / -1; }
-@media (max-width: 900px) {
-  .settings-grid { grid-template-columns: 1fr; }
+@media (min-width: 700px) {
+  .settings-grid { grid-template-columns: 1fr 1fr; gap: 16px; }
+}
+/* 리스크 슬라이더 2열 그리드 (반응형) */
+.risk-sliders-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+@media (min-width: 540px) {
+  .risk-sliders-grid { grid-template-columns: 1fr 1fr; gap: 20px 36px; }
 }
 .form-group { margin-bottom: 14px; }
 .form-label {
@@ -506,6 +536,28 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
 /* Misc */
 .section-gap { margin-bottom: 20px; }
 .empty-msg { color: var(--muted); font-size: 0.8rem; text-align: center; padding: 16px; }
+
+/* ===== Mobile overrides (≤ 600px) ===== */
+@media (max-width: 600px) {
+  .page { padding: 10px; }
+  .header-title { padding: 0 12px; height: 42px; }
+  .header-tabs { padding: 0 2px; height: 36px; }
+  .header-tab { padding: 0 9px; font-size: 0.78rem; }
+  #clock { display: none; }
+  #ws-label { display: none; }
+  .card { padding: 12px; }
+  .card-title { font-size: 0.88rem; margin-bottom: 10px; padding-bottom: 8px; }
+  .chart-container { height: 180px; }
+  .event-log { max-height: 200px; }
+  .sys-log { height: 240px; }
+  /* 매매내역 테이블 폰트 */
+  table { font-size: 0.75rem; }
+  th, td { padding: 6px; }
+  /* 설정 저장 버튼 */
+  .settings-save-row { flex-direction: column !important; align-items: stretch !important; }
+  .settings-save-row > span { display: none !important; }
+  .settings-save-row .btn { width: 100%; padding: 12px; }
+}
 </style>
 </head>
 <body>
@@ -556,10 +608,12 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
     <!-- Positions -->
     <div class="card">
       <div class="card-title">보유 포지션</div>
-      <table>
-        <thead><tr><th>티커</th><th>진입가</th><th>현재가</th><th>평가손익(%)</th><th>보유량</th></tr></thead>
-        <tbody id="positions-body"></tbody>
-      </table>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>티커</th><th>진입가</th><th>현재가</th><th>손익(%)</th><th>수량</th></tr></thead>
+          <tbody id="positions-body"></tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Win Rate Chart -->
@@ -574,10 +628,12 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
         <span>매매내역</span>
         <div id="trade-pagination" style="display:flex;gap:8px;align-items:center;font-size:0.78rem"></div>
       </div>
-      <table>
-        <thead><tr><th>방향</th><th>티커</th><th>수익률</th></tr></thead>
-        <tbody id="trade-history-body"></tbody>
-      </table>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>방향</th><th>티커</th><th>수익률</th></tr></thead>
+          <tbody id="trade-history-body"></tbody>
+        </table>
+      </div>
     </div>
 
   </div>
@@ -658,7 +714,7 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
     <!-- 리스크 설정 -->
     <div class="card settings-full">
       <div class="card-title">리스크 설정</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px 36px">
+      <div class="risk-sliders-grid">
         <div class="slider-group">
           <div class="slider-header">
             <span class="slider-label">거래당 투자 비율</span>
@@ -727,7 +783,7 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
     </div>
 
     <!-- 저장 -->
-    <div class="settings-full" style="display:flex;justify-content:flex-end;align-items:center;gap:16px;padding-top:8px">
+    <div class="settings-full settings-save-row" style="display:flex;justify-content:flex-end;align-items:center;gap:16px;padding-top:8px">
       <span style="font-size:0.75rem;color:var(--muted)">LLM 모델 · 리스크 · 종목 저장 &nbsp;|&nbsp; 매매 모드는 버튼 클릭 시 즉시 반영</span>
       <button class="btn btn-primary" onclick="saveConfig()" style="padding:10px 28px;font-size:0.9rem">저장</button>
     </div>
