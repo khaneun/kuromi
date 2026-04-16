@@ -122,4 +122,13 @@ class RuntimeConfig(BaseModel):
             state.strategy_params["strategy_weights"] = self.strategy_weights
         applied.extend(["decision_threshold", "strategy_weights"])
 
+        # 대시보드에서 종목 변경 시 trading_tickers 동기화 (제거된 종목 복구 포함)
+        if hasattr(state, "trading_tickers"):
+            state.trading_tickers = set(self.trading_tickers)
+            # PortfolioAgent 내부 목록도 갱신
+            portfolio = orchestrator.get_agent("portfolio")
+            if portfolio and hasattr(portfolio, "_trading_tickers"):
+                portfolio._trading_tickers = set(self.trading_tickers)
+            applied.append("trading_tickers")
+
         return applied

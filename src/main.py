@@ -59,6 +59,9 @@ async def amain() -> None:
         state.capital.set_krw(settings.initial_capital_krw)
         state.capital._initial_krw = settings.initial_capital_krw
 
+    # 매매 허용 종목 초기화 (체결 시 제거, 대시보드 저장 시 갱신)
+    state.trading_tickers = set(rcfg.trading_tickers)
+
     session_factory = await init_db(settings.database_url)
     persistence = PersistenceAgent(bus, state, session_factory)
 
@@ -109,6 +112,7 @@ async def amain() -> None:
             equity_tracker=equity_tracker,
             live=(not rcfg.dry_run),
             trading_tickers=tickers,
+            runtime_cfg=rcfg,
         ),
         PerformanceAgent(bus, state, persistence=persistence),
         ImproverAgent(

@@ -50,11 +50,12 @@ class RiskAgent(BaseAgent):
     def _reject_reason(self, intent: dict) -> str | None:
         if self.state.halted:
             return "system_halted"
-        if (
-            intent["side"] == "buy"
-            and len(self.state.capital.positions) >= self.max_positions
-        ):
-            return "max_positions"
+        if intent["side"] == "buy":
+            # 관리 목록이 비어있지 않은 경우에만 체크 (초기화 전 오탐 방지)
+            if self.state.trading_tickers and intent["ticker"] not in self.state.trading_tickers:
+                return "ticker_not_in_watchlist"
+            if len(self.state.capital.positions) >= self.max_positions:
+                return "max_positions"
         if intent["side"] == "sell":
             pos = self.state.capital.positions.get(intent["ticker"])
             if pos and pos.entry_price > 0:

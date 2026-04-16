@@ -14,6 +14,8 @@ class SharedState:
     halted: bool = False
     strategy_params: dict[str, Any] = field(default_factory=dict)
     capital: Capital = field(default_factory=Capital)
+    # 현재 매매 허용 종목 집합 — 체결 시 제거, 대시보드 저장 시 갱신
+    trading_tickers: set[str] = field(default_factory=set)
 
     @property
     def positions(self) -> dict[str, Any]:

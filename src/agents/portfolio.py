@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from src.agents.base import BaseAgent
 from src.core.equity_tracker import EquityTracker
 from src.core.event_bus import Event, EventBus
 from src.core.state import SharedState
 from src.exchange.upbit_client import UpbitClient
+
+if TYPE_CHECKING:
+    from config.runtime_config import RuntimeConfig
 
 
 class PortfolioAgent(BaseAgent):
@@ -23,6 +28,7 @@ class PortfolioAgent(BaseAgent):
         sync_sec: int = 60,
         live: bool = False,
         trading_tickers: list[str] | None = None,
+        runtime_cfg: "RuntimeConfig | None" = None,
     ) -> None:
         super().__init__(bus, state)
         self.client = client
@@ -32,6 +38,7 @@ class PortfolioAgent(BaseAgent):
         self.live = live
         self._sync_counter = 0
         self._trading_tickers: set[str] = set(trading_tickers or [])
+        self._runtime_cfg = runtime_cfg
         self.subscribe("order.filled", self._on_filled)
 
     async def setup(self) -> None:
@@ -74,6 +81,9 @@ class PortfolioAgent(BaseAgent):
             except Exception as exc:
                 self.log(f"open_position failed: {exc}")
                 return
+            # 매수 체결 → 관리 목록에서 제거 (재진입·중복매수 차단)
+            self._remove_from_trading(ticker)
+
         elif o["side"] == "sell":
             # close_position이 position을 제거하기 전에 entry_price 저장
             pos = self.state.capital.positions.get(ticker)
@@ -83,6 +93,22 @@ class PortfolioAgent(BaseAgent):
                 self.state.daily_pnl += (price - entry_price) / entry_price
             # pnl 포함 이벤트 emit → PerformanceAgent·PersistenceAgent가 구독
             await self.emit("trade.closed", {**o, "pnl": pnl, "entry_price": entry_price})
+            # 매도 체결 → 관리 목록에서 제거 (매수 시 이미 제거됐을 수 있으나 방어적으로 재시도)
+            self._remove_from_trading(ticker)
+
+    def _remove_from_trading(self, ticker: str) -> None:
+        """체결된 종목을 관리 목록에서 제거하고 설정 파일에 영속화한다."""
+        # state의 허용 목록 제거 → RiskAgent가 해당 종목 매수 의도를 차단
+        was_present = ticker in self.state.trading_tickers
+        self.state.trading_tickers.discard(ticker)
+        # 내부 orphan 감지 목록 제거 → 이제 포지션 보유 시 orphan으로 관리
+        self._trading_tickers.discard(ticker)
+
+        # runtime_config 파일에도 반영 (재시작 후에도 유지)
+        if self._runtime_cfg and was_present:
+            updated = [t for t in self._runtime_cfg.trading_tickers if t != ticker]
+            self._runtime_cfg.update_and_save({"trading_tickers": updated})
+            self.log(f"trading ticker removed after fill: {ticker}")
 
     async def _refresh_orphan_prices(self) -> None:
         """거래 종목 목록에서 제외됐지만 포지션이 남아 있는 자산의 현재가를 REST로 갱신.
