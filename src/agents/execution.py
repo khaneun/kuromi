@@ -26,6 +26,27 @@ STATE_TOPIC: dict[OrderState, str] = {
     OrderState.FAILED: "order.failed",
 }
 
+# Upbit 호가 단위 (가격 구간별 tick size)
+_UPBIT_TICKS: list[tuple[float, float]] = [
+    (2_000_000, 1_000),
+    (1_000_000, 500),
+    (500_000, 100),
+    (100_000, 50),
+    (10_000, 10),
+    (1_000, 5),
+    (100, 1),
+    (10, 0.1),
+    (0, 0.01),
+]
+
+
+def _tick_round(price: float) -> float:
+    """가격을 Upbit 호가 단위에 맞게 반올림 (400 Bad Request 방지)."""
+    for threshold, step in _UPBIT_TICKS:
+        if price >= threshold:
+            return round(round(price / step) * step, 10)
+    return round(price, 2)
+
 
 class ExecutionAgent(BaseAgent):
     """Owns the order state machine. On startup, recovers in-flight orders
@@ -84,17 +105,34 @@ class ExecutionAgent(BaseAgent):
                 except Exception as exc:
                     self.log(f"poll error uuid={order.uuid}: {exc}")
 
+    _SLIPPAGE = 0.0005  # 0.05% — 즉시 체결 유도 슬리피지
+
     async def _on_approved(self, event: Event) -> None:
         intent = event.payload
-        volume = float(intent.get("volume") or 0)
+        ticker = intent["ticker"]
+        side = intent["side"]
+
+        # 시그널 가격 대신 현재 시장가 기준으로 호가 설정
+        # → 지정가 주문이 시장에서 즉시 체결되도록 유도 (타임아웃 방지)
+        raw_price = self.state.last_prices.get(ticker) or float(intent["price"])
+        if side == "buy":
+            order_price = _tick_round(raw_price * (1 + self._SLIPPAGE))
+            # 현재가 기준으로 매수 물량 재계산 (alloc_krw 고정)
+            alloc_krw = float(intent.get("alloc_krw") or 0)
+            volume = alloc_krw / order_price if order_price > 0 else 0.0
+        else:
+            order_price = _tick_round(raw_price * (1 - self._SLIPPAGE))
+            volume = float(intent.get("volume") or 0)
+
         if volume <= 0:
-            self.log(f"skipping zero-volume intent: {intent.get('ticker')}")
+            self.log(f"skipping zero-volume intent: {ticker}")
             return
+
         order = Order(
             client_id=str(uuid.uuid4()),
-            ticker=intent["ticker"],
-            side=intent["side"],
-            price=float(intent["price"]),
+            ticker=ticker,
+            side=side,
+            price=order_price,
             volume=volume,
         )
         await self._transition(order, OrderState.SUBMITTED)
@@ -121,6 +159,19 @@ class ExecutionAgent(BaseAgent):
                 raise RuntimeError(f"no uuid in upbit response: {result}")
             self._active[order.uuid] = order
             await self._transition(order, OrderState.ACCEPTED)
+        except httpx.HTTPStatusError as exc:
+            # 400 응답 바디를 포함해 로깅 (Upbit 에러 코드 확인용)
+            body = exc.response.text[:300] if exc.response else ""
+            reason = f"HTTP {exc.response.status_code}: {body}"
+            order.reason = reason
+            perm_errors = ("insufficient", "minimum", "below_min", "잔고", "금액", "400")
+            if order.retry_count < 1 and not any(e in reason.lower() for e in perm_errors):
+                order.retry_count += 1
+                self.log(f"order failed ({reason}), retrying #{order.retry_count} for {ticker}")
+                await self._on_approved_retry(order)
+            else:
+                self.log(f"order permanently failed [{ticker}] {reason}")
+                await self._transition(order, OrderState.FAILED)
         except Exception as exc:
             reason = str(exc)
             order.reason = reason
@@ -128,14 +179,20 @@ class ExecutionAgent(BaseAgent):
             perm_errors = ("insufficient", "minimum", "below_min", "잔고", "금액")
             if order.retry_count < 1 and not any(e in reason.lower() for e in perm_errors):
                 order.retry_count += 1
-                self.log(f"order failed ({reason}), retrying #{order.retry_count} for {order.ticker}")
+                self.log(f"order failed ({reason}), retrying #{order.retry_count} for {ticker}")
                 await self._on_approved_retry(order)
             else:
                 await self._transition(order, OrderState.FAILED)
 
     async def _on_approved_retry(self, order: Order) -> None:
-        """재시도용 내부 메서드. 새 uuid로 주문을 재발행한다."""
+        """재시도용 내부 메서드. 가격을 최신 시장가로 갱신 후 재발행한다."""
         await asyncio.sleep(2)
+        # 재시도 시 가격 재계산
+        raw_price = self.state.last_prices.get(order.ticker) or order.price
+        if order.side == "buy":
+            order.price = _tick_round(raw_price * (1 + self._SLIPPAGE))
+        else:
+            order.price = _tick_round(raw_price * (1 - self._SLIPPAGE))
         try:
             result = await self.client.place_order(
                 market=order.ticker,
@@ -148,6 +205,11 @@ class ExecutionAgent(BaseAgent):
                 raise RuntimeError(f"no uuid in retry response: {result}")
             self._active[order.uuid] = order
             await self._transition(order, OrderState.ACCEPTED)
+        except httpx.HTTPStatusError as exc:
+            body = exc.response.text[:300] if exc.response else ""
+            order.reason = f"HTTP {exc.response.status_code}: {body}"
+            self.log(f"retry permanently failed [{order.ticker}] {order.reason}")
+            await self._transition(order, OrderState.FAILED)
         except Exception as exc:
             order.reason = str(exc)
             await self._transition(order, OrderState.FAILED)
