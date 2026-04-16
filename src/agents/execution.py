@@ -95,6 +95,40 @@ class ExecutionAgent(BaseAgent):
             self._active[order.uuid] = order
         if rows:
             self.log(f"recovered {len(rows)} in-flight orders from DB")
+            await self._cleanup_recovered_orders()
+
+    async def _cleanup_recovered_orders(self) -> None:
+        """재시작 후 복구된 주문을 Upbit 실제 상태로 즉시 정리한다.
+
+        - done   → FILLED 처리
+        - cancel → CANCELLED 처리
+        - wait   → 스테일 주문으로 판단해 즉시 취소 (300s 타임아웃 대기 제거)
+        """
+        for order in list(self._active.values()):
+            try:
+                info = await self.client.get_order(order.uuid)
+                order.executed_volume = float(info.get("executed_volume") or 0.0)
+                order.remaining_volume = float(info.get("remaining_volume") or 0.0)
+                upbit_state = info.get("state")
+
+                if upbit_state == "done":
+                    await self._transition(order, OrderState.FILLED)
+                elif upbit_state == "cancel":
+                    order.reason = "cancelled_on_upbit"
+                    await self._transition(order, OrderState.CANCELLED)
+                else:
+                    # "wait" 등 미체결 — 이전 컨테이너에서 만들어진 스테일 주문, 즉시 취소
+                    self.log(f"cancelling stale recovered order: {order.ticker} ({order.uuid})")
+                    try:
+                        await self.client.cancel_order(order.uuid)
+                    except Exception:
+                        pass  # 이미 처리됐거나 네트워크 오류 — 무시
+                    order.reason = self._cancel_reason(order.side)
+                    await self._transition(order, OrderState.CANCELLED)
+            except Exception as exc:
+                self.log(f"cleanup recovered order {order.uuid}: {exc}")
+            finally:
+                self._active.pop(order.uuid, None)
 
     async def run(self) -> None:
         while not self.stopping:

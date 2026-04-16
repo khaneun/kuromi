@@ -42,7 +42,15 @@ class PortfolioAgent(BaseAgent):
         self.subscribe("order.filled", self._on_filled)
 
     async def setup(self) -> None:
-        pass  # initial sync happens in run() to avoid blocking startup
+        # 실매매 모드 시 시작 직후 Upbit 잔고를 동기화한다.
+        # ExecutionAgent.setup()이 복구 주문 체결 이벤트를 emit하기 전에
+        # 자본 상태가 정확해야 open_position 오류를 방지할 수 있다.
+        if self.live and self.client:
+            try:
+                await self._sync_upbit()
+                self.log("initial Upbit sync completed")
+            except Exception as exc:
+                self.log(f"initial Upbit sync failed: {exc}")
 
     async def run(self) -> None:
         while not self.stopping:
@@ -76,11 +84,15 @@ class PortfolioAgent(BaseAgent):
         volume = float(o.get("executed_volume") or o.get("volume") or 0)
 
         if o["side"] == "buy":
-            try:
-                self.state.capital.open_position(ticker, price, volume)
-            except Exception as exc:
-                self.log(f"open_position failed: {exc}")
-                return
+            if ticker in self.state.capital.positions:
+                # 재시작 후 Upbit 동기화로 이미 포지션이 반영된 경우 — open_position 스킵
+                self.log(f"[{ticker}] position already synced from Upbit, skipping open_position")
+            else:
+                try:
+                    self.state.capital.open_position(ticker, price, volume)
+                except Exception as exc:
+                    self.log(f"open_position failed: {exc}")
+                    return
             # 매수 체결 → 관리 목록에서 제거 (재진입·중복매수 차단)
             self._remove_from_trading(ticker)
 

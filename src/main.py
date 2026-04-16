@@ -102,17 +102,20 @@ async def amain() -> None:
             stop_loss_pct=rcfg.stop_loss_pct,
         ),
         persistence,
-        ExecutionAgent(
-            bus, state, upbit,
-            dry_run=rcfg.dry_run,
-            persistence=persistence,
-        ),
+        # PortfolioAgent를 ExecutionAgent 앞에 배치:
+        # setup()에서 Upbit 잔고를 먼저 동기화해야
+        # ExecutionAgent가 복구 주문 체결 이벤트를 emit할 때 자본 상태가 정확하다.
         PortfolioAgent(
             bus, state, client=upbit,
             equity_tracker=equity_tracker,
             live=(not rcfg.dry_run),
             trading_tickers=tickers,
             runtime_cfg=rcfg,
+        ),
+        ExecutionAgent(
+            bus, state, upbit,
+            dry_run=rcfg.dry_run,
+            persistence=persistence,
         ),
         PerformanceAgent(bus, state, persistence=persistence),
         ImproverAgent(

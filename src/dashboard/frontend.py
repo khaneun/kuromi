@@ -818,6 +818,7 @@ function escHtml(s) {
   if (!s) return '';
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
+function sym(ticker) { return (ticker || '').replace(/^KRW-/, ''); }
 
 /* ========== Toast ========== */
 var toastTimer = null;
@@ -955,7 +956,7 @@ function renderPositions(positions) {
     var pnl = p.unrealized_pnl || 0;
     var pnlPct = p.unrealized_pnl_pct;
     return '<tr>' +
-      '<td>' + escHtml(t) + '</td>' +
+      '<td>' + escHtml(sym(t)) + '</td>' +
       '<td>' + fmt(p.entry_price) + '</td>' +
       '<td>' + fmt(p.current_price) + '</td>' +
       '<td class="' + cls(pnl) + '">' + fmt(pnl) + ' (' + pct(pnlPct) + ')</td>' +
@@ -1004,7 +1005,7 @@ function renderTradeHistoryPage() {
       }
       return '<tr>' +
         '<td class="' + sideClass + '">' + side + '</td>' +
-        '<td>' + escHtml(t.ticker) + '</td>' +
+        '<td>' + escHtml(sym(t.ticker)) + '</td>' +
         '<td class="' + pnlClass + '">' + pnlStr + '</td>' +
         '</tr>';
     }).join('');

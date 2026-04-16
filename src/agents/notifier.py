@@ -27,35 +27,40 @@ class NotifierAgent(BaseAgent):
         if text:
             await self._send(text)
 
+    @staticmethod
+    def _sym(ticker: str) -> str:
+        """KRW- 프리픽스 제거 (표시용)."""
+        return (ticker or "?").replace("KRW-", "")
+
     def _format(self, event: Event) -> str | None:
         topic = event.topic
         p = event.payload or {}
 
         if topic == "order.failed":
-            ticker = p.get("ticker", "?")
+            sym = self._sym(p.get("ticker", "?"))
             reason = p.get("reason", "unknown")
             # 잔고 부족은 정상 케이스 — 알림 불필요
             if any(kw in reason.lower() for kw in ("insufficient", "잔고", "부족")):
                 return None
-            return f"💥 <b>주문 실패</b> [{ticker}]\n사유: {reason}"
+            return f"💥 <b>주문 실패</b> [{sym}]\n사유: {reason}"
 
         if topic == "order.cancelled":
-            ticker = p.get("ticker", "?")
+            sym = self._sym(p.get("ticker", "?"))
             reason = p.get("reason", "")
             side = p.get("side", "")
             # 매도 주문 시간 경과 철회 — 오류 아닌 정보성 알림
             if side == "sell" and "시간경과" in reason:
-                return f"📤 <b>매도 철회</b> [{ticker}]\n시간 경과로 주문을 철회합니다. 조건 재평가 대기"
-            return f"❌ <b>주문 취소</b> [{ticker}]\n사유: {reason or 'timeout'}"
+                return f"📤 <b>매도 철회</b> [{sym}]\n시간 경과로 주문을 철회합니다. 조건 재평가 대기"
+            return f"❌ <b>주문 취소</b> [{sym}]\n사유: {reason or 'timeout'}"
 
         if topic == "trade.rejected":
             reason = p.get("reason", "") if isinstance(p, dict) else ""
             if reason not in self.CRITICAL_REJECT_REASONS:
                 return None
-            ticker = p.get("ticker", "?") if isinstance(p, dict) else "?"
+            sym = self._sym(p.get("ticker", "?") if isinstance(p, dict) else "?")
             icons = {"system_halted": "🛑"}
             icon = icons.get(reason, "⚠️")
-            return f"{icon} <b>거래 거절</b> [{ticker}]\n사유: {reason}"
+            return f"{icon} <b>거래 거절</b> [{sym}]\n사유: {reason}"
 
         if topic == "system.halt":
             source = p.get("source", "?") if isinstance(p, dict) else "?"
