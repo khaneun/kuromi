@@ -101,8 +101,8 @@ class PortfolioAgent(BaseAgent):
             pos = self.state.capital.positions.get(ticker)
             entry_price = pos.entry_price if pos else price
             pnl = self.state.capital.close_position(ticker, price)
-            if entry_price > 0:
-                self.state.daily_pnl += (price - entry_price) / entry_price
+            # daily_pnl은 KRW 절대값 누적 (비율 누적은 의미 없음)
+            self.state.daily_pnl += pnl
             # pnl 포함 이벤트 emit → PerformanceAgent·PersistenceAgent가 구독
             await self.emit("trade.closed", {**o, "pnl": pnl, "entry_price": entry_price})
             # 매도 체결 → 관리 목록에서 제거 (매수 시 이미 제거됐을 수 있으나 방어적으로 재시도)

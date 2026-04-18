@@ -30,6 +30,7 @@ class Order:
     state: OrderState = OrderState.SUBMITTED
     executed_volume: float = 0.0
     remaining_volume: float = 0.0
+    avg_fill_price: float = 0.0  # Upbit 체결 평균가 (price는 요청가)
     reason: str = ""
     retry_count: int = 0
     cancel_attempts: int = 0
@@ -42,7 +43,7 @@ class Order:
             "uuid": self.uuid,
             "ticker": self.ticker,
             "side": self.side,
-            "price": self.price,
+            "price": self.avg_fill_price or self.price,  # 실제 체결가 우선
             "volume": self.volume,
             "state": self.state.value,
             "executed_volume": self.executed_volume,

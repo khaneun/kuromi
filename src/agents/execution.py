@@ -269,6 +269,13 @@ class ExecutionAgent(BaseAgent):
         info = await self.client.get_order(order.uuid)
         order.executed_volume = float(info.get("executed_volume") or 0.0)
         order.remaining_volume = float(info.get("remaining_volume") or 0.0)
+        # Upbit trades로 실제 평균 체결가 계산 (요청가 대신)
+        trades = info.get("trades") or []
+        if trades:
+            total_funds = sum(float(t.get("funds") or 0) for t in trades)
+            total_vol = sum(float(t.get("volume") or 0) for t in trades)
+            if total_vol > 0:
+                order.avg_fill_price = total_funds / total_vol
         upbit_state = info.get("state")
 
         next_state = order.state

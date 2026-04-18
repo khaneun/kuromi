@@ -610,7 +610,7 @@ input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%
       <div class="card-title">보유 포지션</div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>티커</th><th>진입가</th><th>현재가</th><th>손익(%)</th><th>수량</th></tr></thead>
+          <thead><tr><th>티커</th><th>매수금액</th><th>평가금액</th><th>손익(%)</th><th>수량</th></tr></thead>
           <tbody id="positions-body"></tbody>
         </table>
       </div>
@@ -1013,8 +1013,8 @@ function renderPositions(positions) {
     var pnlPct = p.unrealized_pnl_pct;
     return '<tr>' +
       '<td>' + escHtml(sym(t)) + '</td>' +
-      '<td>' + fmt(p.entry_price) + '</td>' +
-      '<td>' + fmt(p.current_price) + '</td>' +
+      '<td>' + fmt(p.cost) + '</td>' +
+      '<td>' + fmt(p.market_value != null ? p.market_value : p.cost) + '</td>' +
       '<td class="' + cls(pnl) + '">' + fmt(pnl) + ' (' + pct(pnlPct) + ')</td>' +
       '<td>' + fmtDec(p.volume, 6) + '</td>' +
       '</tr>';
